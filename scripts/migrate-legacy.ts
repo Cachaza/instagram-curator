@@ -30,6 +30,7 @@ const legacyMediaRoot = option(
   "--media",
   "../instagram-curator/data/reels",
 );
+const savedImportRoot = resolve(dirname(legacyDatabasePath), "instagram-saved-import");
 const targetMediaRoot = resolve(dataDir, "media");
 const legacy = new Database(legacyDatabasePath, { readonly: true });
 migrateAppDatabase();
@@ -40,7 +41,17 @@ const admin = db.prepare(`SELECT id FROM "user" WHERE role='admin' ORDER BY crea
 if (!admin) throw new Error("Create the administrator account before migrating legacy data");
 
 type LegacyPublication = Record<string, any>;
-const publications = legacy.prepare("SELECT * FROM reels ORDER BY created_at").all() as LegacyPublication[];
+const savedOrderByShortcode = new Map<string, number>();
+if (existsSync(savedImportRoot)) {
+  const metadataFiles = readdirSync(savedImportRoot)
+    .filter((name) => !name.startsWith(":") && (name.endsWith(".json") || name.endsWith(".json.xz")))
+    .sort((left, right) =>
+      statSync(join(savedImportRoot, left)).mtimeMs - statSync(join(savedImportRoot, right)).mtimeMs);
+  metadataFiles.forEach((name, index) => {
+    savedOrderByShortcode.set(name.replace(/\.json(?:\.xz)?$/, ""), index + 1);
+  });
+}
+const publications = legacy.prepare("SELECT rowid AS legacy_rowid,* FROM reels ORDER BY rowid").all() as LegacyPublication[];
 let linked = 0;
 let copied = 0;
 let missing = 0;
@@ -93,12 +104,12 @@ const migratePublication = db.prepare(`
     id,source_url,source_type,shortcode,author,caption,instagram_json,media_type,
     processing_status,current_stage,review_status,action_status,
     video_path,audio_path,transcript_path,transcript_text,contact_sheet_path,frames_json,
-    published_at,attempts,leased_at,lease_until,last_error,created_by_user_id,created_at,updated_at
+    published_at,saved_order,attempts,leased_at,lease_until,last_error,created_by_user_id,created_at,updated_at
   ) VALUES (
     @id,@source_url,'instagram',@shortcode,@author,@caption,@instagram_json,@media_type,
     @processing_status,@current_stage,@review_status,@action_status,
     @video_path,@audio_path,@transcript_path,@transcript_text,@contact_sheet_path,@frames_json,
-    @published_at,@attempts,@leased_at,@lease_until,@last_error,@created_by_user_id,@created_at,@updated_at
+    @published_at,@saved_order,@attempts,@leased_at,@lease_until,@last_error,@created_by_user_id,@created_at,@updated_at
   )
   ON CONFLICT(id) DO UPDATE SET
     source_url=excluded.source_url,shortcode=excluded.shortcode,author=excluded.author,
@@ -108,7 +119,8 @@ const migratePublication = db.prepare(`
     video_path=excluded.video_path,audio_path=excluded.audio_path,
     transcript_path=excluded.transcript_path,transcript_text=excluded.transcript_text,
     contact_sheet_path=excluded.contact_sheet_path,frames_json=excluded.frames_json,
-    published_at=excluded.published_at,attempts=excluded.attempts,last_error=excluded.last_error,
+    published_at=excluded.published_at,saved_order=excluded.saved_order,
+    attempts=excluded.attempts,last_error=excluded.last_error,
     updated_at=excluded.updated_at
 `);
 
@@ -136,6 +148,8 @@ const transaction = db.transaction(() => {
       transcript_text: transcriptText,
       contact_sheet_path: portablePath(publication.contact_sheet_path),
       frames_json: JSON.stringify(portableFrames),
+      saved_order: savedOrderByShortcode.get(publication.shortcode)
+        ?? savedOrderByShortcode.size + publication.legacy_rowid,
       created_by_user_id: admin.id,
     });
   }

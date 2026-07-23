@@ -6,6 +6,8 @@ import { requireSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
+const FACET_QUERY_KEYS = ["cuisine", "budget", "recipeGoal", "recipeStyle", "fitnessGoal", "muscleGroup"];
+
 export default async function LibraryPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireSession();
   const query = await searchParams;
@@ -15,12 +17,19 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
     const recipe = item.facets.recipe as Record<string, unknown> | undefined;
     const fitness = item.facets.fitness as Record<string, unknown> | undefined;
     const includes = (value: unknown, selected?: string) => !selected || (Array.isArray(value) && value.includes(selected));
-    return includes(restaurant?.cuisine, query.cuisine)
-      && (!query.budget || restaurant?.budget === query.budget)
-      && includes(recipe?.nutritionGoals, query.recipeGoal)
-      && includes(recipe?.foodStyles, query.recipeStyle)
-      && includes(fitness?.goals, query.fitnessGoal)
-      && includes(fitness?.muscleGroups, query.muscleGroup);
+    if (query.category === "restaurant") {
+      return includes(restaurant?.cuisine, query.cuisine)
+        && (!query.budget || restaurant?.budget === query.budget);
+    }
+    if (query.category === "recipe") {
+      return includes(recipe?.nutritionGoals, query.recipeGoal)
+        && includes(recipe?.foodStyles, query.recipeStyle);
+    }
+    if (query.category === "fitness") {
+      return includes(fitness?.goals, query.fitnessGoal)
+        && includes(fitness?.muscleGroups, query.muscleGroup);
+    }
+    return true;
   });
   const currentPage = Math.max(1, Number(query.page) || 1);
   const pageSize = 60;
@@ -43,31 +52,41 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   const params = new URLSearchParams(Object.entries(query).filter((entry): entry is [string,string] => Boolean(entry[1])));
   const categoryHref = (category?: string) => {
     const next = new URLSearchParams(params);
+    FACET_QUERY_KEYS.forEach((key) => next.delete(key));
+    next.delete("page");
     if (category) next.set("category", category);
     else next.delete("category");
     return `/library?${next}`;
   };
   const select = (name: string, label: string, values: Set<string>) => <label>{label}<select name={name} defaultValue={query[name] ?? ""}><option value="">Cualquiera</option>{[...values].sort().map((value) => <option key={value}>{value}</option>)}</select></label>;
+  const hasRelevantFilters = ["restaurant", "recipe", "fitness"].includes(query.category ?? "");
+  const hasActiveFilter = FACET_QUERY_KEYS.some((key) => Boolean(query[key]));
   return (
     <div className="page-container">
       <section className="page-hero"><p className="section-kicker">DESCUBRE DE NUEVO</p><h1>Explorar<span>.</span></h1><p>Encuentra esa idea que sabías que habías guardado en algún sitio.</p></section>
       <div className="category-pills"><Link className={!query.category ? "active" : ""} href={categoryHref()}><LayoutGrid aria-hidden="true" /> Todo</Link>{categoryRows.map((row) => {
         const meta = categoryInfo(row.category); const CategoryIcon = meta.Icon; return <Link className={query.category === row.category ? "active" : ""} href={categoryHref(row.category)} key={row.category}><CategoryIcon aria-hidden="true" /> {meta.label} <small>{row.count}</small></Link>;
       })}</div>
-      <details className="advanced-filters" open={Boolean(query.cuisine || query.budget || query.recipeGoal || query.fitnessGoal)}>
+      {hasRelevantFilters && <details className="advanced-filters" open={hasActiveFilter}>
         <summary><SlidersHorizontal />Filtros avanzados</summary>
         <form>
           {query.q && <input type="hidden" name="q" value={query.q} />}
           {query.category && <input type="hidden" name="category" value={query.category} />}
-          {select("cuisine","Tipo de comida",facets.cuisines)}
-          <label>Precio<select name="budget" defaultValue={query.budget ?? ""}><option value="">Cualquiera</option>{["€","€€","€€€","€€€€"].map((value) => <option key={value}>{value}</option>)}</select></label>
-          {select("recipeGoal","Objetivo nutricional",facets.recipeGoals)}
-          {select("recipeStyle","Estilo de receta",facets.recipeStyles)}
-          {select("fitnessGoal","Objetivo fitness",facets.fitnessGoals)}
-          {select("muscleGroup","Grupo muscular",facets.muscles)}
+          {query.category === "restaurant" && <>
+            {select("cuisine","Tipo de comida",facets.cuisines)}
+            <label>Precio<select name="budget" defaultValue={query.budget ?? ""}><option value="">Cualquiera</option>{["€","€€","€€€","€€€€"].map((value) => <option key={value}>{value}</option>)}</select></label>
+          </>}
+          {query.category === "recipe" && <>
+            {select("recipeGoal","Objetivo nutricional",facets.recipeGoals)}
+            {select("recipeStyle","Estilo de receta",facets.recipeStyles)}
+          </>}
+          {query.category === "fitness" && <>
+            {select("fitnessGoal","Objetivo fitness",facets.fitnessGoals)}
+            {select("muscleGroup","Grupo muscular",facets.muscles)}
+          </>}
           <button className="primary">Aplicar</button>
         </form>
-      </details>
+      </details>}
       <div className="results-row"><strong>{filtered.length}</strong> hallazgos</div>
       <div className="masonry-grid">{visible.map((item) => <PublicationCard item={item} key={item.id} />)}</div>
       {filtered.length === 0 && <div className="empty-state"><h2>Nada por aquí</h2><p>Prueba con otra búsqueda o quita algún filtro.</p></div>}

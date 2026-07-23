@@ -4,6 +4,7 @@ import { dataDir } from "@/lib/paths";
 import { getSetting } from "@/lib/settings";
 import { codexAppServer } from "@/lib/codex/app-server";
 import { codexAccountStatus } from "@/lib/codex/account";
+import { normalizeFacets } from "@/lib/facets";
 
 type Publication = {
   id: string;
@@ -82,9 +83,15 @@ function prompt(item: Publication, locale: string): string {
   return `Analyze this saved Instagram publication for a private knowledge library.
 Return only the structured result requested by the output schema, in ${locale === "en" ? "English" : "Spanish"}. entities_json and facets_json must each contain one valid JSON object encoded as a string.
 Use only the supplied caption, transcript and image. Never invent ratings, exact prices, addresses, ingredients, quantities or claims not supported by the source.
-For restaurants capture mentioned_places and cuisine/budget facets only when evidenced.
-For recipes capture dish_name, ingredients and steps, plus nutritionGoals (bulking, cutting, maintenance), foodStyles (gym, everyday, gourmet) only when evidenced.
-For fitness capture goals, muscleGroups and trainingType only when evidenced.
+For restaurants capture mentioned_places and restaurant facets only when evidenced. Use this exact shape:
+{"restaurant":{"cuisine":[],"budget":null,"occasion":[],"features":[]}}
+For recipes capture dish_name, ingredients and steps. Use this exact facet shape:
+{"recipe":{"nutritionGoals":[],"foodStyles":[],"mealType":null,"dietaryTags":[],"estimatedTimeMinutes":null}}
+Allowed nutritionGoals values: bulking, cutting, maintenance, high-protein.
+Allowed foodStyles values: gym, gourmet, meal-prep, everyday, comfort-food. Classify meal-prep only when preparing portions ahead is a defining purpose, not merely because the recipe can be stored.
+For fitness use this exact facet shape:
+{"fitness":{"goals":[],"muscleGroups":[],"equipment":[],"difficulty":null,"trainingStyles":[]}}
+Use [] or null for facets that are not evidenced. For every other category return {}.
 Set needs_review when the source is ambiguous or incomplete.
 
 Source URL: ${item.source_url}
@@ -141,10 +148,11 @@ export async function processNextAnalysis(): Promise<boolean> {
     const turnState = completed.turn as { status?: string; error?: { message?: string } };
     if (turnState.status !== "completed") throw new Error(turnState.error?.message ?? `Codex turn ${turnState.status ?? "failed"}`);
     const wire = JSON.parse(finalText) as WireAnalysis;
+    const rawFacets = JSON.parse(wire.facets_json) as Record<string, unknown>;
     const analysis: Analysis = {
       ...wire,
       entities: JSON.parse(wire.entities_json) as Record<string, unknown>,
-      facets: JSON.parse(wire.facets_json) as Record<string, unknown>,
+      facets: normalizeFacets(wire.category, rawFacets),
     };
     const locale = getSetting("analysis.locale", "es");
     db.transaction(() => {
