@@ -44,6 +44,7 @@ export function migrateAppDatabase(): void {
       contact_sheet_path TEXT,
       frames_json TEXT NOT NULL DEFAULT '[]',
       published_at TEXT,
+      saved_order INTEGER,
       attempts INTEGER NOT NULL DEFAULT 0,
       leased_at TEXT,
       lease_until TEXT,
@@ -144,17 +145,24 @@ export function migrateAppDatabase(): void {
     ["contact_sheet_path", "TEXT"],
     ["frames_json", "TEXT NOT NULL DEFAULT '[]'"],
     ["published_at", "TEXT"],
+    ["saved_order", "INTEGER"],
     ["leased_at", "TEXT"],
     ["lease_until", "TEXT"],
   ];
+  const addedSavedOrder = !columns.has("saved_order");
   for (const [name, definition] of additions) {
     if (!columns.has(name)) db.exec(`ALTER TABLE publications ADD COLUMN ${name} ${definition}`);
+  }
+  if (addedSavedOrder) {
+    db.exec("UPDATE publications SET saved_order=rowid WHERE id LIKE 'reel_%'");
   }
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_publications_review
       ON publications(review_status, processing_status);
     CREATE INDEX IF NOT EXISTS idx_publications_action
       ON publications(action_status, processing_status);
+    CREATE INDEX IF NOT EXISTS idx_publications_saved_order
+      ON publications(saved_order);
   `);
   db.prepare("INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (?,?)")
     .run(1, "complete-curator-model");

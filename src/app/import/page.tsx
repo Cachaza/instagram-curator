@@ -36,7 +36,10 @@ export default async function ImportPage() {
             {imports.length === 0 ? <div className="empty">{t.import.empty}</div> : imports.map((item) => (
               <article key={item.id}>
                 <div className={`status status-${item.processing_status}`} />
-                <div><strong>{item.source_url}</strong><small>{new Date(`${item.created_at}Z`).toLocaleString()}</small></div>
+                <div>
+                  <strong>{item.media_type === "video" ? t.import.reel : t.import.publication}<span> · {item.shortcode}</span></strong>
+                  <small>{new Date(`${item.created_at}Z`).toLocaleString()}</small>
+                </div>
                 <span className="pill">{t.statuses[item.processing_status] ?? item.processing_status}</span>
               </article>
             ))}

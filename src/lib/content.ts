@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { normalizeFacets } from "./facets";
 
 export type ContentItem = {
   id: string;
@@ -53,6 +54,8 @@ function mapRow(row: Row): ContentItem {
     tags: json(row.tags_json, []),
     entities: json(row.entities_json, {}),
   }, correction);
+  const category = String(effective.category ?? "unknown");
+  const rawFacets = json<Record<string, unknown>>(row.facets_json, {});
   return {
     id: String(row.id),
     sourceUrl: String(row.source_url),
@@ -66,7 +69,7 @@ function mapRow(row: Row): ContentItem {
     publishedAt: String(row.published_at ?? row.created_at),
     hasImage: Boolean(row.contact_sheet_path),
     hasVideo: Boolean(row.video_path),
-    category: String(effective.category ?? "unknown"),
+    category,
     subcategory: effective.subcategory ? String(effective.subcategory) : null,
     title: String(effective.title ?? "Sin título"),
     summary: String(effective.summary ?? ""),
@@ -75,7 +78,7 @@ function mapRow(row: Row): ContentItem {
     nextAction: effective.nextAction ? String(effective.nextAction) : effective.next_action ? String(effective.next_action) : null,
     tags: Array.isArray(effective.tags) ? effective.tags.map(String) : [],
     entities: typeof effective.entities === "object" && effective.entities ? effective.entities as Record<string, unknown> : {},
-    facets: json(row.facets_json, {}),
+    facets: normalizeFacets(category, rawFacets),
     confidence: Number(row.confidence ?? 0),
     needsReview: Boolean(row.needs_review),
     reviewReason: row.review_reason ? String(row.review_reason) : null,
@@ -109,7 +112,11 @@ export function listContent(options: {
   }
   const limit = options.limit ? " LIMIT ?" : "";
   if (options.limit) params.push(options.limit);
-  return (db.prepare(`${SELECT} WHERE ${clauses.join(" AND ")} ORDER BY COALESCE(p.published_at,p.created_at) DESC${limit}`)
+  return (db.prepare(`${SELECT} WHERE ${clauses.join(" AND ")}
+    ORDER BY
+      CASE WHEN p.saved_order IS NULL THEN 0 ELSE 1 END,
+      CASE WHEN p.saved_order IS NULL THEN p.created_at END DESC,
+      p.saved_order ASC${limit}`)
     .all(...params) as Row[]).map(mapRow);
 }
 

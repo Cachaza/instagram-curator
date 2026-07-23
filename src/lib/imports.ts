@@ -53,11 +53,12 @@ function wakePipeline(): void {
 
 export function recentImports(limit = 20) {
   return db.prepare(`
-    SELECT id,source_url,processing_status,last_error,created_at
+    SELECT id,shortcode,media_type,processing_status,last_error,created_at
     FROM publications ORDER BY created_at DESC LIMIT ?
   `).all(limit) as Array<{
     id: string;
-    source_url: string;
+    shortcode: string;
+    media_type: string | null;
     processing_status: string;
     last_error: string | null;
     created_at: string;

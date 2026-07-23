@@ -21,6 +21,17 @@ export type AnalysisFacets = {
   };
 };
 
+const FACET_CATEGORIES = ["restaurant", "recipe", "fitness"] as const;
+
+export function normalizeFacets(
+  category: string,
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!FACET_CATEGORIES.includes(category as (typeof FACET_CATEGORIES)[number])) return value;
+  if (typeof value[category] === "object" && value[category] !== null) return value;
+  return Object.keys(value).length > 0 ? { [category]: value } : {};
+}
+
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
