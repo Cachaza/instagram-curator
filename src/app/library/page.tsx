@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SlidersHorizontal } from "lucide-react";
+import { LayoutGrid, SlidersHorizontal } from "lucide-react";
 import { categories, listContent } from "@/lib/content";
 import { PublicationCard, categoryInfo } from "@/components/publication-card";
 import { requireSession } from "@/lib/session";
@@ -51,8 +51,8 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   return (
     <div className="page-container">
       <section className="page-hero"><p className="section-kicker">DESCUBRE DE NUEVO</p><h1>Explorar<span>.</span></h1><p>Encuentra esa idea que sabías que habías guardado en algún sitio.</p></section>
-      <div className="category-pills"><Link className={!query.category ? "active" : ""} href={categoryHref()}>✦ Todo</Link>{categoryRows.map((row) => {
-        const meta = categoryInfo(row.category); return <Link className={query.category === row.category ? "active" : ""} href={categoryHref(row.category)} key={row.category}>{meta.emoji} {meta.label} <small>{row.count}</small></Link>;
+      <div className="category-pills"><Link className={!query.category ? "active" : ""} href={categoryHref()}><LayoutGrid aria-hidden="true" /> Todo</Link>{categoryRows.map((row) => {
+        const meta = categoryInfo(row.category); const CategoryIcon = meta.Icon; return <Link className={query.category === row.category ? "active" : ""} href={categoryHref(row.category)} key={row.category}><CategoryIcon aria-hidden="true" /> {meta.label} <small>{row.count}</small></Link>;
       })}</div>
       <details className="advanced-filters" open={Boolean(query.cuisine || query.budget || query.recipeGoal || query.fitnessGoal)}>
         <summary><SlidersHorizontal />Filtros avanzados</summary>

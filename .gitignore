@@ -13,3 +13,7 @@ data/
 coverage/
 *.tsbuildinfo
 .DS_Store
+.impeccable/config.local.json
+.impeccable/questions/
+.codex/
+.gitleaks-dir-report.json

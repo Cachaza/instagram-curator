@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/session";
 import { systemDiagnostics } from "@/lib/diagnostics";
+import { Check, TriangleAlert } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export default async function DiagnosticsPage() {
         <h1>{ready ? "Todo preparado" : "Quedan ajustes"}</h1>
         <p className="muted">Estado real de las dependencias que necesita el pipeline.</p>
         <div className="diagnostic-list">
-          {checks.map((check) => <article key={check.id} className={check.ok ? "check-ok" : "check-failed"}><span>{check.ok ? "✓" : "!"}</span><div><strong>{check.label}</strong><small>{check.detail}</small></div></article>)}
+          {checks.map((check) => <article key={check.id} className={check.ok ? "check-ok" : "check-failed"}><span>{check.ok ? <Check aria-hidden="true" /> : <TriangleAlert aria-hidden="true" />}</span><div><strong>{check.label}</strong><small>{check.detail}</small></div></article>)}
         </div>
         <div className="button-row"><a className="secondary" href="/setup">Configurar</a><a className="primary" href="/import">Importar reel</a></div>
       </section>
