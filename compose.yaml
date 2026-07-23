@@ -1,0 +1,15 @@
+services:
+  curator:
+    image: ghcr.io/cachaza/instagram-curator:${CURATOR_VERSION:-latest}
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      CURATOR_BASE_URL: ${CURATOR_BASE_URL:-http://localhost:3000}
+      CURATOR_TRUSTED_ORIGINS: ${CURATOR_TRUSTED_ORIGINS:-http://localhost:3000}
+    volumes:
+      - curator-data:/app/data
+
+volumes:
+  curator-data:

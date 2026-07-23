@@ -1,0 +1,20 @@
+[Unit]
+Description=Instagram Curator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_DIR__
+Environment=NODE_ENV=production
+Environment=CURATOR_BASE_URL=__CURATOR_BASE_URL__
+Environment=CURATOR_TRUSTED_ORIGINS=__CURATOR_TRUSTED_ORIGINS__
+Environment=CODEX_BIN=__CODEX_BIN__
+Environment=PATH=__RUNTIME_PATH__
+ExecStart=__BUN_BIN__ run start:tailscale
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+[Install]
+WantedBy=default.target

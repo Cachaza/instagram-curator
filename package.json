@@ -1,0 +1,49 @@
+{
+  "name": "instagram-curator-oss",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "dev:tailscale": "concurrently -k \"next dev -H 0.0.0.0\" \"tsx src/worker/cli.ts --watch\"",
+    "build": "next build",
+    "start": "next start",
+    "start:tailscale": "concurrently -k \"next start -H 0.0.0.0\" \"tsx src/worker/cli.ts --watch\"",
+    "start:selfhosted": "bun run db:migrate && bun run auth:migrate && bun run start:tailscale",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "migrate:legacy": "tsx scripts/migrate-legacy.ts",
+    "backup": "tsx scripts/backup.ts",
+    "restore": "tsx scripts/restore.ts",
+    "service:install": "bash scripts/install-service.sh",
+    "worker": "tsx src/worker/cli.ts",
+    "auth:migrate": "better-auth migrate --config src/lib/auth.ts --yes",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "better-auth": "^1.6.24",
+    "better-sqlite3": "^12.4.1",
+    "lucide-react": "^0.468.0",
+    "next": "^16.2.11",
+    "openai": "^6.48.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@better-auth/cli": "^1.4.21",
+    "@types/bun": "^1.3.10",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^16.2.9",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "bun@1.3.0"
+}
