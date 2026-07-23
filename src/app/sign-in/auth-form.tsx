@@ -31,13 +31,13 @@ export function AuthForm({ initialMode, locale }: { initialMode: "sign-in" | "si
   }
 
   return (
-    <form onSubmit={submit} className="stack">
+    <form onSubmit={submit} className="stack" aria-busy={loading}>
       {mode === "sign-up" && (
         <label>{t.auth.name}<input name="name" autoComplete="name" required /></label>
       )}
       <label>{t.auth.email}<input name="email" type="email" autoComplete="email" required /></label>
       <label>{t.auth.password}<input name="password" type="password" minLength={4} autoComplete={mode === "sign-up" ? "new-password" : "current-password"} required /></label>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
       <button className="primary" disabled={loading}>{loading ? t.common.loading : mode === "sign-up" ? t.auth.createAccount : t.auth.signIn}</button>
     </form>
   );

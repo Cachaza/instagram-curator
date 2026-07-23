@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-23T00:00:00Z",
+  "title": "Design System: Curator",
+  "extensions": {
+    "colorMeta": {
+      "limewash": { "role": "neutral", "displayName": "Limewash", "canonical": "#F2EFEA" },
+      "paper": { "role": "neutral", "displayName": "Archive Paper", "canonical": "#FAF9F6" },
+      "graphite": { "role": "primary", "displayName": "Section Graphite", "canonical": "#1A1D20" },
+      "shadow-blue": { "role": "secondary", "displayName": "Shadow Blue", "canonical": "#8DA1B4" },
+      "limestone": { "role": "neutral", "displayName": "Limestone", "canonical": "#DAD6CD" },
+      "rule": { "role": "neutral", "displayName": "Measured Rule", "canonical": "#BFC3C7" },
+      "sunbeam": { "role": "primary", "displayName": "Sunbeam", "canonical": "#E8BC4D" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Section Display", "purpose": "Page thesis and major collection headings." },
+      "body": { "displayName": "Working Text", "purpose": "Interface copy and extracted knowledge." },
+      "label": { "displayName": "Archive Annotation", "purpose": "Provenance, state, category, and measured notes." }
+    },
+    "shadows": [
+      { "name": "interaction-lift", "value": "0 12px 30px rgba(26,29,32,0.12)", "purpose": "Directly hovered or focused publication cards only." }
+    ],
+    "motion": [
+      { "name": "section-shift", "value": "220ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Navigation, card lift, and annotation reveal." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "760px" }
+    ]
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "The Illuminated Living Archive",
+    "overview": "A living collection whose architectural light makes the relationship between source and useful knowledge visible.",
+    "keyCharacteristics": [
+      "Persistent lateral index",
+      "Image-led archival cards",
+      "Traceable knowledge annotations",
+      "Mineral daylight palette"
+    ],
+    "rules": [
+      { "name": "The Sunbeam Rule", "body": "Yellow marks an active relationship or moment of discovery; it is never scattered decoration.", "section": "colors" },
+      { "name": "The Section Rule", "body": "Prefer a structural rule or tonal cut to a decorative shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Keep source imagery visually primary.",
+      "Use annotation only when it adds traceability.",
+      "Retain the efficient lateral navigation model."
+    ],
+    "donts": [
+      "Do not literalize the concept with floor plans.",
+      "Do not use generic rounded dashboard cards.",
+      "Do not use orange as the product accent."
+    ]
+  }
+}

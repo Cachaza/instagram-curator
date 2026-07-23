@@ -11,8 +11,10 @@ export default function SignInPage() {
   return (
     <main className="centered">
       <section className="auth-card">
-        <div className="brand-mark">IC</div>
-        <p className="eyebrow">{t.auth.selfHosted}</p>
+        <div className="auth-brand" aria-label={t.appName}>
+          <span className="brand-mark" aria-hidden="true">C</span>
+          <span>{t.appName}</span>
+        </div>
         <h1>{users === 0 ? t.auth.createAdmin : t.auth.signInTitle}</h1>
         <p className="muted">
           {users === 0
