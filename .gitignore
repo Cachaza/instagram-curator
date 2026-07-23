@@ -15,5 +15,6 @@ coverage/
 .DS_Store
 .impeccable/config.local.json
 .impeccable/questions/
+.agents/skills/impeccable/
 .codex/
 .gitleaks-dir-report.json
