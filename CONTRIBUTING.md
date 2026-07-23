@@ -44,6 +44,13 @@ cp .env.example .env
 docker compose up --build
 ```
 
+The interface was designed with assistance from the Impeccable agent skill.
+Install it separately with:
+
+```bash
+npx impeccable install
+```
+
 ## Making a change
 
 1. Fork the repository and create a focused branch from `main`.
