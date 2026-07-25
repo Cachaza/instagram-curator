@@ -94,7 +94,7 @@ docker run -d \
   ghcr.io/cachaza/instagram-curator:latest
 ```
 
-Versioned images are published as `ghcr.io/cachaza/instagram-curator:0.2.1`,
+Versioned images are published as `ghcr.io/cachaza/instagram-curator:0.2.2`,
 `0.2`, `0`, and `latest`.
 
 Open `CURATOR_BASE_URL`. On a completely empty installation Curator creates its
