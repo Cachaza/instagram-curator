@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { resolveMediaPath } from "@/lib/media";
+import { resolveCompatibleVideo, resolveMediaPath } from "@/lib/media";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
@@ -16,8 +16,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     .get(id) as { contact_sheet_path: string | null; video_path: string | null; audio_path: string | null } | undefined;
   const kind = new URL(request.url).searchParams.get("kind");
   const stored = kind === "video" ? row?.video_path : kind === "audio" ? row?.audio_path : row?.contact_sheet_path;
-  const path = resolveMediaPath(stored ?? null);
-  if (!path) return new NextResponse("Not found", { status: 404 });
+  const resolvedPath = resolveMediaPath(stored ?? null);
+  if (!resolvedPath) return new NextResponse("Not found", { status: 404 });
+  const path = kind === "video" ? await resolveCompatibleVideo(resolvedPath) : resolvedPath;
   const contentType = kind === "video" ? "video/mp4" : kind === "audio" ? "audio/wav" : "image/jpeg";
   if (kind === "video" || kind === "audio") {
     const size = (await stat(path)).size;

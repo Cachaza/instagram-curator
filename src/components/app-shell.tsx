@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Activity, BookOpen, CheckSquare, Home, Library, Menu, PlusCircle,
+  Activity, CheckSquare, Library, Menu, PlusCircle,
   Github, Search, Settings, Sparkles, Users, X,
 } from "lucide-react";
 import Link from "next/link";
@@ -17,10 +17,8 @@ export function AppShell({ children, locale }: { children: React.ReactNode; loca
   const session = authClient.useSession();
   const t = messages[locale].shell;
   const navigation = [
-    { href: "/dashboard", label: t.home, icon: Home },
     { href: "/library", label: t.explore, icon: Library },
     { href: "/review", label: t.review, icon: CheckSquare },
-    { href: "/actions", label: t.actions, icon: BookOpen },
     { href: "/pipeline", label: t.processing, icon: Activity },
     { href: "/import", label: t.add, icon: PlusCircle },
   ];
@@ -53,7 +51,7 @@ export function AppShell({ children, locale }: { children: React.ReactNode; loca
       {mobileOpen && <button className="sidebar-backdrop" aria-label={t.closeNavigation} onClick={() => setMobileOpen(false)} />}
       <header className="app-header">
         <button className="mobile-menu" aria-label={t.openNavigation} onClick={() => setMobileOpen(true)}><Menu /></button>
-        <Link className="mobile-brand" href="/dashboard" aria-label="Curator, inicio"><span aria-hidden="true">◩</span>curator</Link>
+        <Link className="mobile-brand" href="/library" aria-label="Curator, explorar"><span aria-hidden="true">◩</span>curator</Link>
         <form className="global-search" onSubmit={search}><Search /><input name="q" placeholder={t.searchPlaceholder} aria-label={t.search} /></form>
         <Link className="header-add" href="/import"><PlusCircle />{t.add}</Link>
         <div className="user-menu">
@@ -63,7 +61,7 @@ export function AppShell({ children, locale }: { children: React.ReactNode; loca
       </header>
       <main className="app-main">{children}</main>
       <nav className="mobile-nav">
-        {navigation.slice(0, 4).map(({ href, label, icon: Icon }) => (
+        {navigation.slice(0, 3).map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} className={pathname.startsWith(href) ? "nav-active" : ""}><Icon /><span>{label}</span></Link>
         ))}
       </nav>
