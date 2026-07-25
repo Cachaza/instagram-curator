@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { normalizeFacets } from "./facets";
+import { searchTerms } from "./search";
 
 export type ContentItem = {
   id: string;
@@ -106,9 +107,23 @@ export function listContent(options: {
   if (options.review) { clauses.push("COALESCE(r.review_status,p.review_status)=?"); params.push(options.review); }
   if (options.action) { clauses.push("COALESCE(r.action_status,p.action_status)=?"); params.push(options.action); }
   if (options.query) {
-    clauses.push("(a.title LIKE ? OR a.summary LIKE ? OR a.tags_json LIKE ? OR p.transcript_text LIKE ?)");
-    const query = `%${options.query}%`;
-    params.push(query, query, query, query);
+    const searchableColumns = [
+      "a.title",
+      "a.summary",
+      "a.visual_description",
+      "a.why_interesting",
+      "a.tags_json",
+      "a.entities_json",
+      "a.facets_json",
+      "p.caption",
+      "p.transcript_text",
+      "r.corrected_analysis_json",
+    ];
+    for (const term of searchTerms(options.query)) {
+      clauses.push(`(${searchableColumns.map((column) => `${column} LIKE ? ESCAPE '\\'`).join(" OR ")})`);
+      const pattern = `%${term}%`;
+      params.push(...searchableColumns.map(() => pattern));
+    }
   }
   const limit = options.limit ? " LIMIT ?" : "";
   if (options.limit) params.push(options.limit);
