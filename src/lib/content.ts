@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { normalizeFacets } from "./facets";
-import { searchTerms } from "./search";
+import { ftsQuery } from "./search";
+import { resolveMediaPath } from "./media";
 
 export type ContentItem = {
   id: string;
@@ -68,11 +69,12 @@ function mapRow(row: Row): ContentItem {
     reviewStatus: String(row.review_review_status ?? row.review_status),
     actionStatus: String(row.review_action_status ?? row.action_status),
     publishedAt: String(row.published_at ?? row.created_at),
-    hasImage: Boolean(row.contact_sheet_path),
-    hasVideo: Boolean(row.video_path),
+    hasImage: Boolean(resolveMediaPath(typeof row.contact_sheet_path === "string" ? row.contact_sheet_path : null)),
+    hasVideo: Boolean(resolveMediaPath(typeof row.video_path === "string" ? row.video_path : null)),
     category,
     subcategory: effective.subcategory ? String(effective.subcategory) : null,
-    title: String(effective.title ?? "Sin título"),
+    title: String(effective.title || (typeof row.caption === "string" && row.caption.trim()) ||
+      (typeof row.author === "string" && row.author.trim()) || "Sin título"),
     summary: String(effective.summary ?? ""),
     visualDescription: String(effective.visualDescription ?? effective.visual_description ?? ""),
     whyInteresting: String(effective.whyInteresting ?? effective.why_interesting ?? ""),
@@ -94,41 +96,36 @@ const SELECT = `
     r.review_status review_review_status,r.action_status review_action_status,
     r.corrected_category,r.corrected_analysis_json,r.notes,r.discarded_reason
   FROM publications p
-  JOIN analyses a ON a.publication_id=p.id
+  LEFT JOIN analyses a ON a.publication_id=p.id
   LEFT JOIN publication_reviews r ON r.publication_id=p.id
 `;
+
+const VISIBLE_CONTENT = `(p.processing_status='analyzed' OR
+  (p.processing_status='ready_for_analysis' AND
+    (NULLIF(trim(p.caption),'') IS NOT NULL OR NULLIF(trim(p.transcript_text),'') IS NOT NULL)))`;
 
 export function listContent(options: {
   category?: string; query?: string; review?: string; action?: string; limit?: number;
 } = {}): ContentItem[] {
-  const clauses = ["p.processing_status='analyzed'"];
+  const clauses = [VISIBLE_CONTENT];
   const params: Array<string | number> = [];
-  if (options.category) { clauses.push("COALESCE(r.corrected_category,a.category)=?"); params.push(options.category); }
+  const search = options.query ? ftsQuery(options.query) : "";
+  if (options.query?.trim() && !search) return [];
+  if (options.category) { clauses.push("COALESCE(r.corrected_category,a.category,'unknown')=?"); params.push(options.category); }
   if (options.review) { clauses.push("COALESCE(r.review_status,p.review_status)=?"); params.push(options.review); }
   if (options.action) { clauses.push("COALESCE(r.action_status,p.action_status)=?"); params.push(options.action); }
-  if (options.query) {
-    const searchableColumns = [
-      "a.title",
-      "a.summary",
-      "a.visual_description",
-      "a.why_interesting",
-      "a.tags_json",
-      "a.entities_json",
-      "a.facets_json",
-      "p.caption",
-      "p.transcript_text",
-      "r.corrected_analysis_json",
-    ];
-    for (const term of searchTerms(options.query)) {
-      clauses.push(`(${searchableColumns.map((column) => `${column} LIKE ? ESCAPE '\\'`).join(" OR ")})`);
-      const pattern = `%${term}%`;
-      params.push(...searchableColumns.map(() => pattern));
-    }
-  }
+  if (search) { clauses.push("content_search MATCH ?"); params.push(search); }
   const limit = options.limit ? " LIMIT ?" : "";
   if (options.limit) params.push(options.limit);
-  return (db.prepare(`${SELECT} WHERE ${clauses.join(" AND ")}
+  const searchJoin = search
+    ? "JOIN content_search ON content_search.publication_id=p.id"
+    : "";
+  const searchOrder = search
+    ? "bm25(content_search, 0.0, 10.0, 5.0, 3.0, 1.0),"
+    : "";
+  return (db.prepare(`${SELECT} ${searchJoin} WHERE ${clauses.join(" AND ")}
     ORDER BY
+      ${searchOrder}
       CASE WHEN p.saved_order IS NULL THEN 0 ELSE 1 END,
       CASE WHEN p.saved_order IS NULL THEN p.created_at END DESC,
       p.saved_order ASC${limit}`)
@@ -136,7 +133,7 @@ export function listContent(options: {
 }
 
 export function getContent(id: string): ContentItem | null {
-  const row = db.prepare(`${SELECT} WHERE p.id=?`).get(id) as Row | undefined;
+  const row = db.prepare(`${SELECT} WHERE p.id=? AND ${VISIBLE_CONTENT}`).get(id) as Row | undefined;
   return row ? mapRow(row) : null;
 }
 

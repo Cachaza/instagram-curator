@@ -6,6 +6,7 @@ import { categoryInfo } from "@/components/publication-card";
 import { PublicationActions } from "@/components/publication-actions";
 import { getContent } from "@/lib/content";
 import { requireSession } from "@/lib/session";
+import { dictionary } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,7 @@ function RestaurantPlaces({ entities }: { entities: EntityRecord }) {
 
 export default async function PublicationPage({ params }: { params: Promise<{ id: string }> }) {
   await requireSession();
+  const t = dictionary();
   const { id } = await params;
   const item = getContent(id);
   if (!item) notFound();
@@ -147,6 +149,7 @@ export default async function PublicationPage({ params }: { params: Promise<{ id
       <div className="detail-grid">
         <section className="detail-media">
           {item.hasVideo ? <video controls preload="metadata" poster={item.hasImage ? `/api/media/${item.id}` : undefined} src={`/api/media/${item.id}?kind=video`} /> : item.hasImage ? <Image src={`/api/media/${item.id}`} width={900} height={1200} unoptimized alt="" /> : <div className="detail-placeholder"><CategoryIcon aria-hidden="true" /></div>}
+          {!item.hasVideo && !item.hasImage && <p className="media-unavailable">{t.media.unavailable} <a href={item.sourceUrl} target="_blank" rel="noreferrer">{t.media.openSource}</a></p>}
           {item.caption && <details><summary>Descripción original</summary><p>{item.caption}</p></details>}
           {item.transcript && <details><summary>Transcripción</summary><p className="transcript">{item.transcript}</p></details>}
         </section>

@@ -1,6 +1,6 @@
 {
   "name": "instagram-curator-oss",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -11,6 +11,7 @@
     "start": "next start",
     "start:tailscale": "concurrently -k \"next start -H 0.0.0.0\" \"tsx src/worker/cli.ts --watch\"",
     "start:selfhosted": "bun run db:migrate && bun run auth:migrate && bun run start:tailscale",
+    "start:web": "bun run db:migrate && bun run auth:migrate && CURATOR_WEB_ONLY=1 next start -H 0.0.0.0",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:migrate": "tsx scripts/migrate.ts",

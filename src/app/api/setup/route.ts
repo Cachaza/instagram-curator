@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
   setSetting("ui.locale", parsed.data.uiLocale);
   setSetting("analysis.locale", parsed.data.analysisLocale);
-  setSetting("transcription.provider", "openai");
+  if (!hasSetting("transcription.provider")) setSetting("transcription.provider", "openai");
   setSetting("transcription.model", parsed.data.transcriptionModel);
   if (parsed.data.openaiApiKey) {
     setSetting("transcription.openai_api_key", parsed.data.openaiApiKey, true);
