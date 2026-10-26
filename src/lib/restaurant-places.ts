@@ -1,6 +1,6 @@
 import type { ContentItem } from "./content";
 
-export type PlaceCandidate = { id: string; label: string; latitude: number; longitude: number };
+export type PlaceCandidate = { id: string; label: string; latitude: number; longitude: number; category?: string; kind?: string };
 export type RestaurantPlace = {
   publicationId: string;
   key: string;
@@ -25,14 +25,22 @@ export function restaurantPlaces(item: Pick<ContentItem, "id" | "category" | "en
   if (item.category !== "restaurant" || item.reviewStatus === "discarded") return [];
   const entities = item.entities;
   const mentions: unknown[] = Array.isArray(entities.mentioned_places) ? entities.mentioned_places : [];
-  const primaryName = text(entities.restaurant_name);
-  const primary = primaryName ? [{ name: primaryName, location_hint: entities.address_as_stated }] : [];
+  const restaurant = record(entities.restaurant);
+  const primaryName = text(entities.restaurant_name) || text(restaurant.name);
+  const primaryHint = text(entities.address_as_stated) || text(entities.address) || text(restaurant.address_as_stated)
+    || text(restaurant.address) || text(restaurant.location)
+    || (Array.isArray(restaurant.mentioned_places) ? restaurant.mentioned_places.map(text).filter(Boolean).join(", ") : "")
+    || text(entities.city);
+  const primary = primaryName ? [{ name: primaryName, location_hint: primaryHint }] : [];
+  const otherRestaurants = Array.isArray(entities.restaurants) ? entities.restaurants : [];
   const places = new Map<string, RestaurantPlace>();
-  for (const value of [...primary, ...mentions]) {
+  for (const value of [...primary, ...mentions, ...otherRestaurants]) {
     const entry = record(value);
     const name = text(entry.name) || (typeof value === "string" && !Object.keys(entry).length ? text(value) : "");
     if (!name) continue;
-    const hint = text(entry.location_hint) || text(entry.address_as_stated);
+    const hint = text(entry.location_hint) || [...new Set([
+      entry.address_as_stated, entry.address, entry.location, entry.locality, entry.district, entry.city, entry.region, entry.area,
+    ].map(text).filter(Boolean))].join(", ");
     const key = JSON.stringify([name, hint]);
     places.set(key, { publicationId: item.id, key, name, hint, location: null });
   }

@@ -4,7 +4,7 @@ import { transaction } from "./db";
 import { validCoordinates, type PlaceCandidate } from "./restaurant-places";
 
 export const candidateSchema = z.object({
-  id: z.string().min(1), label: z.string().min(1), latitude: z.number(), longitude: z.number(),
+  id: z.string().min(1), label: z.string().min(1), latitude: z.number(), longitude: z.number(), category: z.string().optional(), kind: z.string().optional(),
 }).refine((value) => validCoordinates(value.latitude, value.longitude));
 
 export class GeocodingError extends Error {
@@ -20,8 +20,8 @@ export function geocodingCacheKey(endpoint: URL, query: string) {
 export function parseCandidates(value: unknown): PlaceCandidate[] {
   if (!Array.isArray(value)) throw new Error("invalid_geocoding_response");
   return value.map((entry) => {
-    const raw = z.object({ osm_type: z.string(), osm_id: z.union([z.number(), z.string()]), display_name: z.string(), lat: z.string().min(1), lon: z.string().min(1) }).parse(entry);
-    return candidateSchema.parse({ id: `${raw.osm_type}/${raw.osm_id}`, label: raw.display_name, latitude: Number(raw.lat), longitude: Number(raw.lon) });
+    const raw = z.object({ osm_type: z.string(), osm_id: z.union([z.number(), z.string()]), display_name: z.string(), lat: z.string().min(1), lon: z.string().min(1), category: z.string().optional(), class: z.string().optional(), type: z.string().optional() }).parse(entry);
+    return candidateSchema.parse({ id: `${raw.osm_type}/${raw.osm_id}`, label: raw.display_name, latitude: Number(raw.lat), longitude: Number(raw.lon), ...((raw.category || raw.class) ? { category: raw.category || raw.class } : {}), ...(raw.type ? { kind: raw.type } : {}) });
   });
 }
 

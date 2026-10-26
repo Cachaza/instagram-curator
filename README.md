@@ -185,6 +185,18 @@ and bills that user's Mapbox account; address lookup continues to use
 OpenStreetMap so saved coordinates do not depend on Mapbox's temporary-geocoding
 storage restrictions. **Forget token** removes the saved browser token.
 
+For a one-time backfill, preview with `node --import tsx
+scripts/geocode-restaurants.ts` in the production container, then add `--apply`
+to run it. This command runs one batch on one machine, respects Nominatim's
+shared one-query-per-second limit, and reuses cached results. Do not schedule it
+against the public Nominatim service; see its [usage policy](https://operations.osmfoundation.org/policies/nominatim/).
+Only one exact venue/name/location-hint match is saved automatically. Missing,
+ambiguous and failed matches are recorded in `pipeline_events` at the `geocoding`
+stage. Provider failures halt the run and mark remaining entries as deferred;
+a later explicit run reuses completed results. Existing pins are preserved,
+including pins confirmed while a lookup is running. Output includes the run ID
+and aggregate progress; `--run-id` can label a specific operational run.
+
 **Near me** requests browser location permission when pressed and sorts confirmed
 places by straight-line distance. The position is not saved or sent to Curator's
 server. Basemap providers receive tile requests for the viewed area. Browser
