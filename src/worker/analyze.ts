@@ -2,9 +2,9 @@ import { resolve } from "node:path";
 import { db } from "@/lib/db";
 import { dataDir } from "@/lib/paths";
 import { getSetting } from "@/lib/settings";
-import { codexAppServer } from "@/lib/codex/app-server";
 import { codexAccountStatus } from "@/lib/codex/account";
 import { normalizeFacets } from "@/lib/facets";
+import { runCodexAnalysis } from "./codex-analysis";
 
 type Publication = {
   id: string;
@@ -109,44 +109,13 @@ export async function processNextAnalysis(): Promise<boolean> {
   const item = claim();
   if (!item) return false;
   try {
-    const started = await codexAppServer.request<{ thread: { id: string } }>("thread/start", {
-      cwd: dataDir,
-      runtimeWorkspaceRoots: [dataDir],
-      approvalPolicy: "never",
-      sandbox: "read-only",
-      ephemeral: true,
-      baseInstructions: "You are a careful content curator. Do not run commands, edit files, browse the web, or use external facts. Analyze only the user-provided source material.",
-    });
     const inputs: Array<Record<string, unknown>> = [
       { type: "text", text: prompt(item, getSetting("analysis.locale", "es")), text_elements: [] },
     ];
     if (item.contact_sheet_path) {
       inputs.push({ type: "localImage", path: resolve(dataDir, item.contact_sheet_path), detail: "high" });
     }
-    let finalText = "";
-    const stop = codexAppServer.onNotification((message) => {
-      if (message.method !== "item/completed") return;
-      const params = message.params as { threadId?: string; item?: { type?: string; text?: string } } | undefined;
-      if (params?.threadId === started.thread.id && params.item?.type === "agentMessage") finalText = params.item.text ?? finalText;
-    });
-    const activeTurn: { id?: string } = {};
-    const completion = codexAppServer.waitFor(
-      "turn/completed",
-      (params) => params.threadId === started.thread.id
-        && (!activeTurn.id || (params.turn as { id?: string } | undefined)?.id === activeTurn.id),
-      900_000,
-    );
-    const turn = await codexAppServer.request<{ turn: { id: string } }>("turn/start", {
-      threadId: started.thread.id,
-      input: inputs,
-      outputSchema,
-      effort: "medium",
-    });
-    activeTurn.id = turn.turn.id;
-    const completed = await completion;
-    stop();
-    const turnState = completed.turn as { status?: string; error?: { message?: string } };
-    if (turnState.status !== "completed") throw new Error(turnState.error?.message ?? `Codex turn ${turnState.status ?? "failed"}`);
+    const finalText = await runCodexAnalysis(item.id, inputs, outputSchema);
     const wire = JSON.parse(finalText) as WireAnalysis;
     const rawFacets = JSON.parse(wire.facets_json) as Record<string, unknown>;
     const analysis: Analysis = {

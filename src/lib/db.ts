@@ -167,6 +167,29 @@ export function migrateAppDatabase(): void {
   db.prepare("INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (?,?)")
     .run(1, "complete-curator-model");
 
+  db.transaction(() => {
+    // Web and worker can start together: acquire the write lock before checking.
+    if (db.prepare("SELECT 1 FROM schema_migrations WHERE version=4").get()) return;
+    db.exec(`CREATE TABLE codex_usage (
+      thread_id TEXT PRIMARY KEY,
+      publication_id TEXT REFERENCES publications(id) ON DELETE SET NULL,
+      turn_id TEXT,
+      model TEXT,
+      reasoning_effort TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','completed','failed')),
+      input_tokens INTEGER,
+      cached_input_tokens INTEGER,
+      output_tokens INTEGER,
+      reasoning_output_tokens INTEGER,
+      total_tokens INTEGER,
+      estimated_credits_micros INTEGER,
+      estimated_usd_micros INTEGER,
+      started_at TEXT NOT NULL,
+      completed_at TEXT
+    )`);
+    db.prepare("INSERT INTO schema_migrations(version,name) VALUES (4,'codex-usage')").run();
+  }).immediate();
+
   const hasSearchMigration = db.prepare(
     "SELECT 1 FROM schema_migrations WHERE version=?",
   ).get(2);

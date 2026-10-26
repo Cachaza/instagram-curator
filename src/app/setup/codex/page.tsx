@@ -11,7 +11,7 @@ export default async function CodexSetupPage() {
   return (
     <main className="centered wide">
       <section className="setup-card">
-        <p className="eyebrow">ASISTENTE DE ANÁLISIS</p>
+        <p className="eyebrow">{t.codex.assistant}</p>
         <h1>{t.diagnostics.codex}</h1>
         <p className="muted">{t.codex.intro}</p>
         <CodexSetup locale={locale} webOnly={process.env.CURATOR_WEB_ONLY === "1"} />

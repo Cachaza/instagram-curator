@@ -159,6 +159,27 @@ The administrator is guided through the setup screens:
 No Instagram password is required. A cookies file is usually more reliable for
 self-hosting and can be replaced from the settings interface.
 
+### Codex model and usage
+
+Open **Settings → Codex model and usage** (`/setup/codex`) to choose an analysis
+model and a supported reasoning level from the installed Codex catalog. Access
+is confirmed by a successful analysis, rather than by appearing in the catalog.
+Until configured, Curator leaves the model to Codex's default and requests medium
+reasoning. Changes apply to the next analysis and do not start a worker.
+
+Curator records token snapshots for new analysis attempts, including failed
+attempts when Codex reports usage. Cached input and reasoning output are subsets
+of input and output, not additional tokens. Duplicate snapshots are not added.
+Historical analyses are not assigned invented measurements; missing values stay
+unavailable. Usage records survive deletion of their publication.
+
+The same page shows account-wide quota percentages and reset times, which may
+include other Codex clients. Optional per-thread credit and USD estimates are
+stored only when the installed Codex service returns them. They are estimates,
+not an API invoice or a confirmed additional subscription charge. Unsupported
+usage endpoints do not prevent analysis, and no inference is run to refresh
+usage or list models.
+
 ### Local transcription
 
 The worker also accepts `transcription.provider = "local"` in `app_settings`.
