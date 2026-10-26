@@ -6,6 +6,7 @@ services:
     ports:
       - "3000:3000"
     environment:
+      DATABASE_URL: ${DATABASE_URL:?Set a private PostgreSQL DATABASE_URL reachable from this container}
       CURATOR_BASE_URL: ${CURATOR_BASE_URL:-http://localhost:3000}
       CURATOR_TRUSTED_ORIGINS: ${CURATOR_TRUSTED_ORIGINS:-http://localhost:3000}
     volumes:

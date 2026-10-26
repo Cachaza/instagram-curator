@@ -7,11 +7,11 @@ export const dynamic = "force-dynamic";
 
 export default async function MembersPage() {
   await requireAdmin();
-  const locale = appLocale();
-  const t = dictionary(locale);
-  const users = db.prepare(`
-    SELECT id,name,email,role,createdAt FROM "user" ORDER BY createdAt
-  `).all() as Array<{ id: string; name: string; email: string; role: string; createdAt: string }>;
+  const locale = await appLocale();
+  const t = await dictionary(locale);
+  const users = await db.all<{ id: string; name: string; email: string; role: string; createdAt: string }>(`
+    SELECT id,name,email,role,"createdAt" FROM "user" ORDER BY "createdAt"
+  `);
 
   return (
     <main className="centered wide">

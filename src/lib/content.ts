@@ -104,45 +104,45 @@ const VISIBLE_CONTENT = `(p.processing_status='analyzed' OR
   (p.processing_status='ready_for_analysis' AND
     (NULLIF(trim(p.caption),'') IS NOT NULL OR NULLIF(trim(p.transcript_text),'') IS NOT NULL)))`;
 
-export function listContent(options: {
+export async function listContent(options: {
   category?: string; query?: string; review?: string; action?: string; limit?: number;
-} = {}): ContentItem[] {
+} = {}): Promise<ContentItem[]> {
   const clauses = [VISIBLE_CONTENT];
   const params: Array<string | number> = [];
   const search = options.query ? ftsQuery(options.query) : "";
   if (options.query?.trim() && !search) return [];
-  if (options.category) { clauses.push("COALESCE(r.corrected_category,a.category,'unknown')=?"); params.push(options.category); }
-  if (options.review) { clauses.push("COALESCE(r.review_status,p.review_status)=?"); params.push(options.review); }
-  if (options.action) { clauses.push("COALESCE(r.action_status,p.action_status)=?"); params.push(options.action); }
-  if (search) { clauses.push("content_search MATCH ?"); params.push(search); }
-  const limit = options.limit ? " LIMIT ?" : "";
+  if (options.category) { params.push(options.category); clauses.push(`COALESCE(r.corrected_category,a.category,'unknown')=$${params.length}`); }
+  if (options.review) { params.push(options.review); clauses.push(`COALESCE(r.review_status,p.review_status)=$${params.length}`); }
+  if (options.action) { params.push(options.action); clauses.push(`COALESCE(r.action_status,p.action_status)=$${params.length}`); }
+  if (search) { params.push(search); clauses.push(`content_search.document @@ to_tsquery('curator_search',$${params.length})`); }
+  const limit = options.limit ? ` LIMIT $${params.length + 1}` : "";
   if (options.limit) params.push(options.limit);
   const searchJoin = search
     ? "JOIN content_search ON content_search.publication_id=p.id"
     : "";
+  const searchPosition = params.indexOf(search) + 1;
   const searchOrder = search
-    ? "bm25(content_search, 0.0, 10.0, 5.0, 3.0, 1.0),"
+    ? `ts_rank(content_search.document,to_tsquery('curator_search',$${searchPosition})) DESC,`
     : "";
-  return (db.prepare(`${SELECT} ${searchJoin} WHERE ${clauses.join(" AND ")}
+  return ((await db.all(`${SELECT} ${searchJoin} WHERE ${clauses.join(" AND ")}
     ORDER BY
       ${searchOrder}
       CASE WHEN p.saved_order IS NULL THEN 0 ELSE 1 END,
       CASE WHEN p.saved_order IS NULL THEN p.created_at END DESC,
-      p.saved_order ASC${limit}`)
-    .all(...params) as Row[]).map(mapRow);
+      p.saved_order ASC${limit}`,[...params])) as Row[]).map(mapRow);
 }
 
-export function getContent(id: string): ContentItem | null {
-  const row = db.prepare(`${SELECT} WHERE p.id=? AND ${VISIBLE_CONTENT}`).get(id) as Row | undefined;
+export async function getContent(id: string): Promise<ContentItem | null> {
+  const row = (await db.one(`${SELECT} WHERE p.id=$1 AND ${VISIBLE_CONTENT}`,[id])) as Row | undefined;
   return row ? mapRow(row) : null;
 }
 
-export function categories() {
-  return db.prepare(`
-    SELECT COALESCE(r.corrected_category,a.category) category,COUNT(*) count
+export async function categories() {
+  return (await db.all(`
+    SELECT COALESCE(r.corrected_category,a.category) category,COUNT(*)::int count
     FROM analyses a JOIN publications p ON p.id=a.publication_id
     LEFT JOIN publication_reviews r ON r.publication_id=p.id
     WHERE p.processing_status='analyzed'
-    GROUP BY category ORDER BY count DESC
-  `).all() as Array<{ category: string; count: number }>;
+    GROUP BY COALESCE(r.corrected_category,a.category) ORDER BY count DESC
+  `,[])) as Array<{ category: string; count: number }>;
 }

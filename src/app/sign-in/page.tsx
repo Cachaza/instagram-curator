@@ -4,10 +4,10 @@ import { AuthForm } from "./auth-form";
 
 export const dynamic = "force-dynamic";
 
-export default function SignInPage() {
-  const users = (db.prepare('SELECT COUNT(*) AS count FROM "user"').get() as { count: number }).count;
-  const locale = appLocale();
-  const t = dictionary(locale);
+export default async function SignInPage() {
+  const users = (await db.one<{ count: number }>('SELECT COUNT(*)::int AS count FROM "user"'))?.count ?? 0;
+  const locale = await appLocale();
+  const t = await dictionary(locale);
   return (
     <main className="centered">
       <section className="auth-card">

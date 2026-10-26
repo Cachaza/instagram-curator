@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { getContent } from "@/lib/content";
+import { getContent, type ContentItem } from "@/lib/content";
 import { requireSession } from "@/lib/session";
 import { reviewQueue } from "@/lib/reviews";
 import { ReviewForm } from "./review-form";
@@ -11,8 +11,8 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
   await requireSession();
   const query = await searchParams;
   const filter = query.filter ?? "unreviewed";
-  const queue = reviewQueue(filter);
-  const selected = query.id ? getContent(query.id) : queue[0] ?? null;
+  const queue: ContentItem[] = await reviewQueue(filter);
+  const selected = query.id ? await getContent(query.id) : queue[0] ?? null;
   const index = selected ? queue.findIndex((item) => item.id === selected.id) : -1;
   const nextId = queue.length > 1 ? queue[(index + 1 + queue.length) % queue.length]?.id ?? null : null;
   return (

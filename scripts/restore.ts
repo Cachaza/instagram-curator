@@ -1,27 +1,35 @@
-import Database from "better-sqlite3";
-import { existsSync, mkdirSync, renameSync, copyFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { dataDir, databasePath } from "../src/lib/paths";
+import { createHash } from "node:crypto";
+import { dataDir } from "../src/lib/paths";
+import { migrateAppDatabase, pool } from "../src/lib/db";
+import { importLibraryRows, libraryTables } from "../src/lib/postgres-import";
 
 const source = process.argv[2] ? resolve(process.argv[2]) : "";
-if (!source || !process.argv.includes("--confirm")) {
-  throw new Error("Usage: bun run restore -- /path/to/backup --confirm (stop Curator first)");
+if (!source || !process.argv.includes("--confirm")) throw new Error("Usage: bun run restore -- /private/backup --confirm. Stop Curator writers and configure a new empty PostgreSQL target first.");
+const manifest = JSON.parse(readFileSync(join(source,"manifest.json"),"utf8"));
+if (manifest.format !== 2) throw new Error("This is a legacy SQLite backup. Use migrate:postgres -- --sqlite <backup>/curator.sqlite --confirm, and restore its private media separately.");
+const json = readFileSync(join(source,"library.json"),"utf8");
+if (createHash("sha256").update(json).digest("hex") !== manifest.sha256) throw new Error("Backup checksum mismatch; use an intact backup.");
+const archive = join(source,"private-files.tar.gz");
+const listing = spawnSync("tar",["-tzf",archive],{encoding:"utf8"});
+if (listing.status !== 0) throw new Error("Private-file archive is invalid; database has not been changed.");
+const data = JSON.parse(json);
+if (data.format !== 2) throw new Error("Unsupported library backup format");
+for (const table of [...libraryTables,"schema_migrations"]) {
+  if (!Array.isArray(data.tables?.[table])) throw new Error(`Backup is missing table ${table}; restore refused.`);
 }
-const sourceDb = join(source, "curator.sqlite");
-const mediaArchive = join(source, "media.tar.gz");
-if (!existsSync(sourceDb) || !existsSync(mediaArchive)) throw new Error("Invalid backup directory");
-const probe = new Database(sourceDb, { readonly: true });
-const integrity = probe.pragma("integrity_check", { simple: true });
-probe.close();
-if (integrity !== "ok") throw new Error(`Backup database integrity check failed: ${integrity}`);
-
-mkdirSync(dataDir, { recursive: true, mode: 0o700 });
-const stamp = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
-if (existsSync(databasePath)) renameSync(databasePath, `${databasePath}.before-restore-${stamp}`);
-copyFileSync(sourceDb, databasePath);
-const currentMedia = join(dataDir, "media");
-if (existsSync(currentMedia)) renameSync(currentMedia, join(dataDir, `media.before-restore-${stamp}`));
-const tar = spawnSync("tar", ["-xzf", mediaArchive, "-C", dataDir], { encoding: "utf8" });
-if (tar.status !== 0) throw new Error(tar.stderr || "Could not restore media archive");
-console.log(`Restored ${source}. Previous data remains beside it with suffix before-restore-${stamp}.`);
+try {
+  await migrateAppDatabase();
+  await importLibraryRows(data.tables);
+  mkdirSync(dataDir,{recursive:true,mode:0o700});
+  const stamp = new Date().toISOString().replaceAll(":","-").replaceAll(".","-");
+  for (const name of ["media","auth-secret","codex","secrets"]) {
+    const path = join(dataDir,name);
+    if (existsSync(path)) renameSync(path,`${path}.before-restore-${stamp}`);
+  }
+  const tar = spawnSync("tar",["-xzf",archive,"-C",dataDir],{encoding:"utf8"});
+  if (tar.status !== 0) throw new Error(tar.stderr || "Database restored; private-file extraction failed. Retain the previous files and retry extraction from the backup.");
+  console.log(`Restored ${source}; previous private files retained with suffix before-restore-${stamp}.`);
+} finally { await pool.end(); }

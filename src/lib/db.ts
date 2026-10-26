@@ -1,380 +1,80 @@
-import Database from "better-sqlite3";
-import { mkdirSync } from "node:fs";
-import { dataDir, databasePath } from "./paths";
+import { Pool, types, defaults, type PoolClient, type QueryResultRow } from "pg";
+import { databaseConfig } from "./database-config";
+import { applicationSchema, searchSchema } from "./postgres-schema";
 
-mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+// JavaScript's exact integer range is an external runtime constraint. Never
+// silently round PostgreSQL bigint counters or identifiers.
+types.setTypeParser(20, (value) => {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number)) throw new Error(`Integer precision limit: allowed absolute value ${Number.MAX_SAFE_INTEGER}; requested ${value}. Export this value as text or use bigint before increasing stored counters.`);
+  return number;
+});
 
-export const db = new Database(databasePath);
-db.pragma("foreign_keys = ON");
-db.pragma("journal_mode = WAL");
-db.pragma("busy_timeout = 5000");
+// Preserve UTC epoch dates across Mac and server, including timestamp columns
+// from older Better Auth schemas. Current auth timestamps include a time zone.
+defaults.parseInputDatesAsUTC = true;
+types.setTypeParser(1114, (value) => new Date(value.replace(" ","T") + "Z"));
 
-export function migrateAppDatabase(): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS app_settings (
-      key TEXT PRIMARY KEY,
-      value_json TEXT NOT NULL,
-      is_secret INTEGER NOT NULL DEFAULT 0 CHECK(is_secret IN (0, 1)),
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
+// Only migration/import tools open SQLite. Runtime data always comes from this
+// shared pool; a missing URL must never silently create an empty local library.
+export const pool = new Pool(databaseConfig());
+// Better Auth wraps signup in one transaction. Serializable isolation makes
+// the initial user-count predicate and insertion indivisible across hosts:
+// competing bootstrap transactions cannot both create an administrator.
+export const authPool = new Pool({...databaseConfig(),options:"-c default_transaction_isolation=serializable"});
 
-    CREATE TABLE IF NOT EXISTS publications (
-      id TEXT PRIMARY KEY,
-      source_url TEXT NOT NULL UNIQUE,
-      source_type TEXT NOT NULL DEFAULT 'instagram',
-      shortcode TEXT,
-      author TEXT,
-      caption TEXT,
-      instagram_json TEXT,
-      media_type TEXT,
-      processing_status TEXT NOT NULL DEFAULT 'pending'
-        CHECK(processing_status IN (
-          'pending', 'downloading', 'extracting_media', 'transcribing',
-          'ready_for_analysis', 'analyzing', 'ready_for_review', 'analyzed', 'failed'
-        )),
-      current_stage TEXT NOT NULL DEFAULT 'pending',
-      review_status TEXT NOT NULL DEFAULT 'unreviewed'
-        CHECK(review_status IN ('unreviewed','approved','corrected','discarded')),
-      action_status TEXT NOT NULL DEFAULT 'inbox'
-        CHECK(action_status IN ('inbox','action','someday','reference','done')),
-      video_path TEXT,
-      audio_path TEXT,
-      transcript_path TEXT,
-      transcript_text TEXT,
-      contact_sheet_path TEXT,
-      frames_json TEXT NOT NULL DEFAULT '[]',
-      published_at TEXT,
-      saved_order INTEGER,
-      attempts INTEGER NOT NULL DEFAULT 0,
-      leased_at TEXT,
-      lease_until TEXT,
-      last_error TEXT,
-      created_by_user_id TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
+export type Database = {
+  all<T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<T[]>;
+  one<T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<T | undefined>;
+  execute(sql: string, params?: unknown[]): Promise<void>;
+};
 
-    CREATE TABLE IF NOT EXISTS pipeline_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      publication_id TEXT NOT NULL REFERENCES publications(id) ON DELETE CASCADE,
-      stage TEXT NOT NULL,
-      event_type TEXT NOT NULL,
-      message TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
+function database(client: Pool | PoolClient): Database {
+  const query = (sql: string, params: unknown[] = []) => {
+    if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required. Configure the shared PostgreSQL database before starting Curator.");
+    return client.query(sql, params);
+  };
+  return {
+    async all<T extends QueryResultRow>(sql: string, params?: unknown[]) { return (await query(sql, params)).rows as T[]; },
+    async one<T extends QueryResultRow>(sql: string, params?: unknown[]) { return (await query(sql, params)).rows[0] as T | undefined; },
+    async execute(sql: string, params?: unknown[]) { await query(sql, params); },
+  };
+}
 
-    CREATE TABLE IF NOT EXISTS analyses (
-      publication_id TEXT PRIMARY KEY REFERENCES publications(id) ON DELETE CASCADE,
-      category TEXT NOT NULL,
-      subcategory TEXT,
-      title TEXT NOT NULL,
-      summary TEXT NOT NULL,
-      visual_description TEXT NOT NULL,
-      why_interesting TEXT,
-      next_action TEXT,
-      ai_action_status TEXT NOT NULL DEFAULT 'inbox'
-        CHECK(ai_action_status IN ('inbox','action','someday','reference','done')),
-      tags_json TEXT NOT NULL DEFAULT '[]',
-      entities_json TEXT NOT NULL DEFAULT '{}',
-      facets_json TEXT NOT NULL DEFAULT '{}',
-      legacy_entities_json TEXT,
-      confidence REAL NOT NULL,
-      needs_review INTEGER NOT NULL DEFAULT 0,
-      review_reason TEXT,
-      codex_notes TEXT,
-      prompt_version TEXT NOT NULL DEFAULT 'v2',
-      output_locale TEXT NOT NULL DEFAULT 'es',
-      analyzed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
+export const db = database(pool);
 
-    CREATE TABLE IF NOT EXISTS analysis_versions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      publication_id TEXT NOT NULL REFERENCES publications(id) ON DELETE CASCADE,
-      analysis_json TEXT NOT NULL,
-      source TEXT NOT NULL DEFAULT 'codex',
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS publication_reviews (
-      publication_id TEXT PRIMARY KEY REFERENCES publications(id) ON DELETE CASCADE,
-      review_status TEXT NOT NULL
-        CHECK(review_status IN ('unreviewed','approved','corrected','discarded')),
-      action_status TEXT NOT NULL
-        CHECK(action_status IN ('inbox','action','someday','reference','done')),
-      corrected_category TEXT,
-      corrected_analysis_json TEXT,
-      notes TEXT,
-      discarded_reason TEXT,
-      reviewed_by_user_id TEXT,
-      reviewed_at TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      version INTEGER PRIMARY KEY,
-      name TEXT NOT NULL,
-      applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_publications_queue
-      ON publications(processing_status, created_at);
-    CREATE INDEX IF NOT EXISTS idx_publications_creator
-      ON publications(created_by_user_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_pipeline_events_publication
-      ON pipeline_events(publication_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_analyses_category
-      ON analyses(category, subcategory);
-  `);
-
-  // Existing development databases created before the complete model need the
-  // same additive columns. SQLite has no IF NOT EXISTS for ADD COLUMN.
-  const columns = new Set(
-    (db.prepare("PRAGMA table_info(publications)").all() as Array<{ name: string }>).map((column) => column.name),
-  );
-  const additions: Array<[string, string]> = [
-    ["author", "TEXT"],
-    ["caption", "TEXT"],
-    ["instagram_json", "TEXT"],
-    ["review_status", "TEXT NOT NULL DEFAULT 'unreviewed'"],
-    ["action_status", "TEXT NOT NULL DEFAULT 'inbox'"],
-    ["video_path", "TEXT"],
-    ["audio_path", "TEXT"],
-    ["transcript_path", "TEXT"],
-    ["transcript_text", "TEXT"],
-    ["contact_sheet_path", "TEXT"],
-    ["frames_json", "TEXT NOT NULL DEFAULT '[]'"],
-    ["published_at", "TEXT"],
-    ["saved_order", "INTEGER"],
-    ["leased_at", "TEXT"],
-    ["lease_until", "TEXT"],
-  ];
-  const addedSavedOrder = !columns.has("saved_order");
-  for (const [name, definition] of additions) {
-    if (!columns.has(name)) db.exec(`ALTER TABLE publications ADD COLUMN ${name} ${definition}`);
-  }
-  if (addedSavedOrder) {
-    db.exec("UPDATE publications SET saved_order=rowid WHERE id LIKE 'reel_%'");
-  }
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_publications_review
-      ON publications(review_status, processing_status);
-    CREATE INDEX IF NOT EXISTS idx_publications_action
-      ON publications(action_status, processing_status);
-    CREATE INDEX IF NOT EXISTS idx_publications_saved_order
-      ON publications(saved_order);
-  `);
-  db.prepare("INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (?,?)")
-    .run(1, "complete-curator-model");
-
-  db.transaction(() => {
-    // Web and worker can start together: acquire the write lock before checking.
-    if (db.prepare("SELECT 1 FROM schema_migrations WHERE version=4").get()) return;
-    db.exec(`CREATE TABLE codex_usage (
-      thread_id TEXT PRIMARY KEY,
-      publication_id TEXT REFERENCES publications(id) ON DELETE SET NULL,
-      turn_id TEXT,
-      model TEXT,
-      reasoning_effort TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','completed','failed')),
-      input_tokens INTEGER,
-      cached_input_tokens INTEGER,
-      output_tokens INTEGER,
-      reasoning_output_tokens INTEGER,
-      total_tokens INTEGER,
-      estimated_credits_micros INTEGER,
-      estimated_usd_micros INTEGER,
-      started_at TEXT NOT NULL,
-      completed_at TEXT
-    )`);
-    db.prepare("INSERT INTO schema_migrations(version,name) VALUES (4,'codex-usage')").run();
-  }).immediate();
-
-  const hasSearchMigration = db.prepare(
-    "SELECT 1 FROM schema_migrations WHERE version=?",
-  ).get(2);
-  if (!hasSearchMigration) {
-    db.transaction(() => {
-      db.exec(`
-        CREATE VIRTUAL TABLE content_search USING fts5(
-          publication_id UNINDEXED,
-          title,
-          tags,
-          summary,
-          body,
-          tokenize = 'unicode61 remove_diacritics 2'
-        );
-
-        CREATE VIEW content_search_documents AS
-        SELECT
-          p.id publication_id,
-          COALESCE(json_extract(r.corrected_analysis_json, '$.title'), a.title, '') title,
-          COALESCE(json_extract(r.corrected_analysis_json, '$.tags'), a.tags_json, '') tags,
-          COALESCE(json_extract(r.corrected_analysis_json, '$.summary'), a.summary, '') summary,
-          concat_ws(' ',
-            p.author, p.caption, p.transcript_text,
-            COALESCE(r.corrected_category, a.category), a.subcategory,
-            a.visual_description, a.why_interesting, a.next_action,
-            a.entities_json, a.facets_json, r.corrected_analysis_json, r.notes
-          ) body
-        FROM publications p
-        JOIN analyses a ON a.publication_id=p.id
-        LEFT JOIN publication_reviews r ON r.publication_id=p.id;
-
-        CREATE TRIGGER content_search_analysis_insert AFTER INSERT ON analyses BEGIN
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=NEW.publication_id;
-        END;
-
-        CREATE TRIGGER content_search_analysis_update AFTER UPDATE ON analyses BEGIN
-          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=NEW.publication_id;
-        END;
-
-        CREATE TRIGGER content_search_analysis_delete AFTER DELETE ON analyses BEGIN
-          DELETE FROM content_search WHERE publication_id=OLD.publication_id;
-        END;
-
-        CREATE TRIGGER content_search_publication_update
-        AFTER UPDATE OF author,caption,transcript_text ON publications BEGIN
-          DELETE FROM content_search WHERE publication_id=NEW.id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=NEW.id;
-        END;
-
-        CREATE TRIGGER content_search_publication_delete AFTER DELETE ON publications BEGIN
-          DELETE FROM content_search WHERE publication_id=OLD.id;
-        END;
-
-        CREATE TRIGGER content_search_review_insert AFTER INSERT ON publication_reviews BEGIN
-          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=NEW.publication_id;
-        END;
-
-        CREATE TRIGGER content_search_review_update AFTER UPDATE ON publication_reviews BEGIN
-          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=NEW.publication_id;
-        END;
-
-        CREATE TRIGGER content_search_review_delete AFTER DELETE ON publication_reviews BEGIN
-          DELETE FROM content_search WHERE publication_id=OLD.publication_id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=OLD.publication_id;
-        END;
-
-        INSERT INTO content_search(publication_id,title,tags,summary,body)
-        SELECT publication_id,title,tags,summary,body FROM content_search_documents;
-      `);
-      db.prepare("INSERT INTO schema_migrations(version,name) VALUES (?,?)")
-        .run(2, "sqlite-fts5-search");
-    })();
-  }
-
-  const hasSearchContentMigration = db.prepare(
-    "SELECT 1 FROM schema_migrations WHERE version=?",
-  ).get(3);
-  if (!hasSearchContentMigration) {
-    db.transaction(() => {
-      db.exec(`
-        DROP TRIGGER content_search_analysis_insert;
-        DROP TRIGGER content_search_analysis_update;
-        DROP TRIGGER content_search_analysis_delete;
-        DROP TRIGGER content_search_publication_update;
-        DROP TRIGGER content_search_publication_delete;
-        DROP TRIGGER content_search_review_insert;
-        DROP TRIGGER content_search_review_update;
-        DROP TRIGGER content_search_review_delete;
-        DROP VIEW content_search_documents;
-
-        CREATE VIEW content_search_documents AS
-        SELECT
-          p.id publication_id,
-          COALESCE(json_extract(r.corrected_analysis_json, '$.title'), a.title,
-            NULLIF(trim(p.caption), ''), NULLIF(trim(p.author), ''), 'Sin título') title,
-          COALESCE(json_extract(r.corrected_analysis_json, '$.tags'), a.tags_json, '') tags,
-          COALESCE(json_extract(r.corrected_analysis_json, '$.summary'), a.summary, '') summary,
-          concat_ws(' ',
-            p.author, p.caption, p.transcript_text,
-            COALESCE(r.corrected_category, a.category), a.subcategory,
-            a.visual_description, a.why_interesting, a.next_action,
-            a.entities_json, a.facets_json, r.corrected_analysis_json, r.notes
-          ) body
-        FROM publications p
-        LEFT JOIN analyses a ON a.publication_id=p.id
-        LEFT JOIN publication_reviews r ON r.publication_id=p.id
-        WHERE p.processing_status IN ('ready_for_analysis','analyzed');
-
-        CREATE TRIGGER content_search_analysis_insert AFTER INSERT ON analyses BEGIN
-          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=NEW.publication_id;
-        END;
-
-        CREATE TRIGGER content_search_analysis_update AFTER UPDATE ON analyses BEGIN
-          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=NEW.publication_id;
-        END;
-
-        CREATE TRIGGER content_search_analysis_delete AFTER DELETE ON analyses BEGIN
-          DELETE FROM content_search WHERE publication_id=OLD.publication_id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=OLD.publication_id;
-        END;
-
-        CREATE TRIGGER content_search_publication_update
-        AFTER UPDATE OF author,caption,transcript_text,processing_status ON publications BEGIN
-          DELETE FROM content_search WHERE publication_id=NEW.id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=NEW.id;
-        END;
-
-        CREATE TRIGGER content_search_publication_delete AFTER DELETE ON publications BEGIN
-          DELETE FROM content_search WHERE publication_id=OLD.id;
-        END;
-
-        CREATE TRIGGER content_search_review_insert AFTER INSERT ON publication_reviews BEGIN
-          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=NEW.publication_id;
-        END;
-
-        CREATE TRIGGER content_search_review_update AFTER UPDATE ON publication_reviews BEGIN
-          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=NEW.publication_id;
-        END;
-
-        CREATE TRIGGER content_search_review_delete AFTER DELETE ON publication_reviews BEGIN
-          DELETE FROM content_search WHERE publication_id=OLD.publication_id;
-          INSERT INTO content_search(publication_id,title,tags,summary,body)
-          SELECT publication_id,title,tags,summary,body
-          FROM content_search_documents WHERE publication_id=OLD.publication_id;
-        END;
-
-        DELETE FROM content_search;
-        INSERT INTO content_search(publication_id,title,tags,summary,body)
-        SELECT publication_id,title,tags,summary,body FROM content_search_documents;
-      `);
-      db.prepare("INSERT INTO schema_migrations(version,name) VALUES (?,?)")
-        .run(3, "fts-search-unanalysed-publications");
-    })();
+export async function transaction<T>(work: (tx: Database) => Promise<T>): Promise<T> {
+  if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required for PostgreSQL transactions.");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const value = await work(database(client));
+    await client.query("COMMIT");
+    return value;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
 }
 
-migrateAppDatabase();
+export async function migrateAppDatabase(): Promise<void> {
+  await transaction(async (tx) => {
+    // A named advisory lock serializes migration checks across Mac/web/worker.
+    await tx.execute("SELECT pg_advisory_xact_lock(hashtextextended('curator-schema-migrations',0))");
+    await tx.execute(applicationSchema);
+    // Compile Better Auth's installed-version schema while holding the same
+    // migration lock, then execute it in this transaction as well.
+    const { getMigrations } = await import("better-auth/db/migration");
+    const { auth } = await import("./auth");
+    const authMigration = await getMigrations(auth.options);
+    if (authMigration.toBeCreated.length || authMigration.toBeAdded.length) {
+      await tx.execute(await authMigration.compileMigrations());
+    }
+    if (!await tx.one("SELECT version FROM schema_migrations WHERE version=5")) {
+      await tx.execute(searchSchema);
+      await tx.execute("INSERT INTO schema_migrations(version,name) VALUES (5,'postgresql-shared-library')");
+    }
+  });
+}

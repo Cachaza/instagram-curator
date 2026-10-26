@@ -6,12 +6,13 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=__PROJECT_DIR__
+EnvironmentFile=-__PROJECT_DIR__/.env.local
 Environment=NODE_ENV=production
 Environment=CURATOR_BASE_URL=__CURATOR_BASE_URL__
 Environment=CURATOR_TRUSTED_ORIGINS=__CURATOR_TRUSTED_ORIGINS__
 Environment=CODEX_BIN=__CODEX_BIN__
 Environment=PATH=__RUNTIME_PATH__
-ExecStart=__BUN_BIN__ run start:tailscale
+ExecStart=__BUN_BIN__ run start:selfhosted
 Restart=on-failure
 RestartSec=5
 UMask=0077

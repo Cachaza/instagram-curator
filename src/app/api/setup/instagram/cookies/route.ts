@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const destination = join(secretsDir, "instagram-cookies.txt");
   writeFileSync(destination, text, { mode: 0o600 });
   chmodSync(destination, 0o600);
-  setSetting("instagram.cookie_file", destination, true);
-  setSetting("instagram.cookies_from_browser", "");
+  await setSetting("instagram.cookie_file", destination, true);
+  await setSetting("instagram.cookies_from_browser", "");
   return NextResponse.json({ ok: true });
 }

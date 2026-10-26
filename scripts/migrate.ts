@@ -1,4 +1,7 @@
-import { migrateAppDatabase } from "../src/lib/db";
-
-migrateAppDatabase();
-console.log("Application database migrated.");
+import { migrateAppDatabase, pool } from "../src/lib/db";
+try {
+  await migrateAppDatabase();
+  console.log("PostgreSQL application and authentication schemas migrated.");
+} finally {
+  await pool.end();
+}

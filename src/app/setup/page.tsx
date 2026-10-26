@@ -4,8 +4,8 @@ import { SetupForm } from "./setup-form";
 
 export default async function SetupPage() {
   await requireAdmin();
-  const locale = appLocale();
-  const t = dictionary(locale);
+  const locale = await appLocale();
+  const t = await dictionary(locale);
   return (
     <main className="centered wide">
       <section className="setup-card">

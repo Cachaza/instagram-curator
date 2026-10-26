@@ -9,7 +9,7 @@ export default async function DiagnosticsPage() {
   await requireAdmin();
   const checks = await systemDiagnostics();
   const ready = checks.every((check) => check.ok || check.external);
-  const t = dictionary();
+  const t = await dictionary();
   const webOnly = process.env.CURATOR_WEB_ONLY === "1";
   return (
     <main className="centered wide">

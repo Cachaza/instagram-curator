@@ -30,7 +30,7 @@ async function createCompatibleVideo(path: string): Promise<string> {
   if (existsSync(output)) return output;
 
   const codec = (await runCommandCapture([
-    getSetting<string>("media.ffprobe_bin", "ffprobe"),
+    await getSetting<string>("media.ffprobe_bin", "ffprobe"),
     "-v", "error", "-select_streams", "v:0",
     "-show_entries", "stream=codec_name", "-of", "default=nw=1:nk=1", path,
   ])).trim();
@@ -38,7 +38,7 @@ async function createCompatibleVideo(path: string): Promise<string> {
 
   const temporary = join(dirname(path), "video.compat.part.mp4");
   await runCommand([
-    getSetting<string>("media.ffmpeg_bin", "ffmpeg"), "-y", "-i", path,
+    await getSetting<string>("media.ffmpeg_bin", "ffmpeg"), "-y", "-i", path,
     "-map", "0:v:0", "-map", "0:a:0?",
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
     "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",

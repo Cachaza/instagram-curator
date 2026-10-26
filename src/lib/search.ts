@@ -22,6 +22,6 @@ export function searchTerms(query: string): string[] {
 
 export function ftsQuery(query: string): string {
   return searchTerms(query)
-    .map((term) => `"${term.replaceAll('"', '""')}"*`)
-    .join(" AND ");
+    .map((term) => `'${term.replaceAll("\\", "\\\\").replaceAll("'", "''")}':*`)
+    .join(" & ");
 }

@@ -20,7 +20,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!parsed.success) return NextResponse.json({ error: "invalid_review" }, { status: 400 });
   const { id } = await context.params;
   try {
-    saveReview(id, { ...parsed.data, userId: session.user.id });
+    await saveReview(id, { ...parsed.data, userId: session.user.id });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "review_failed" }, { status: 400 });
