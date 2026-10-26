@@ -211,6 +211,26 @@ usage or list models.
 ### Local transcription
 
 The worker also accepts `transcription.provider = "local"` in `app_settings`.
+For machine-specific worker configuration, set `CURATOR_WORKER_CONFIG_FILE` to
+a private JSON object keyed by setting names. For example:
+
+```json
+{
+  "transcription.provider": "local",
+  "transcription.local_command": ["/path/to/python", "/path/to/transcribe-local.py"],
+  "media.ffmpeg_bin": "/opt/homebrew/bin/ffmpeg",
+  "media.ffprobe_bin": "/opt/homebrew/bin/ffprobe"
+}
+```
+
+The file can also override `instagram.ytdlp_bin`, `instagram.gallery_dl_bin`,
+`instagram.cookies_from_browser`, and `instagram.cookie_file`. Keep this file
+private: it may contain local paths or browser cookie references. These values
+override the matching shared settings only in the worker; without the file,
+the worker uses shared settings as before. The worker reads and validates the
+file for each configuration load, and reports a missing or malformed file
+instead of silently ignoring it. The web process continues using native ffmpeg.
+
 Configure `transcription.local_command` as an argument array containing the
 local Python executable and transcription script. The worker appends the audio
 path and a fresh output directory; it does not invoke a shell.
