@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { dataDir } from "../src/lib/paths";
 import { migrateAppDatabase, pool } from "../src/lib/db";
-import { importLibraryRows, libraryTables } from "../src/lib/postgres-import";
+import { importLibraryRows, libraryTables, restaurantMapTables } from "../src/lib/postgres-import";
 
 const source = process.argv[2] ? resolve(process.argv[2]) : "";
 if (!source || !process.argv.includes("--confirm")) throw new Error("Usage: bun run restore -- /private/backup --confirm. Stop Curator writers and configure a new empty PostgreSQL target first.");
@@ -17,7 +17,12 @@ const listing = spawnSync("tar",["-tzf",archive],{encoding:"utf8"});
 if (listing.status !== 0) throw new Error("Private-file archive is invalid; database has not been changed.");
 const data = JSON.parse(json);
 if (data.format !== 2) throw new Error("Unsupported library backup format");
+// Migration 6 introduced map tables. Backups taken before that migration are
+// valid without them; upgraded backups must include all map data explicitly.
+const predatesRestaurantMap = Array.isArray(data.tables?.schema_migrations)
+  && !data.tables.schema_migrations.some((row: { version: number }) => row.version >= 6);
 for (const table of [...libraryTables,"schema_migrations"]) {
+  if (predatesRestaurantMap && restaurantMapTables.includes(table as typeof restaurantMapTables[number]) && !(table in data.tables)) data.tables[table] = [];
   if (!Array.isArray(data.tables?.[table])) throw new Error(`Backup is missing table ${table}; restore refused.`);
 }
 try {

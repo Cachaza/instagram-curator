@@ -76,5 +76,6 @@ export async function migrateAppDatabase(): Promise<void> {
       await tx.execute(searchSchema);
       await tx.execute("INSERT INTO schema_migrations(version,name) VALUES (5,'postgresql-shared-library')");
     }
+    await tx.execute("INSERT INTO schema_migrations(version,name) VALUES (6,'restaurant-map-locations') ON CONFLICT(version) DO NOTHING");
   });
 }

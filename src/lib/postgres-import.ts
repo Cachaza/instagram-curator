@@ -2,7 +2,9 @@ import Sqlite from "better-sqlite3";
 import { createHash } from "node:crypto";
 import { transaction, type Database } from "./db";
 
-export const libraryTables = ["user", "account", "session", "verification", "app_settings", "publications", "analyses", "analysis_versions", "publication_reviews", "pipeline_events", "codex_usage"] as const;
+export const restaurantMapTables = ["restaurant_geocodes", "geocoding_service_requests", "restaurant_locations"] as const;
+
+export const libraryTables = ["user", "account", "session", "verification", "app_settings", "publications", "analyses", "analysis_versions", "publication_reviews", "pipeline_events", "codex_usage", ...restaurantMapTables] as const;
 const identifier = (name: string) => `"${name.replaceAll('"', '""')}"`;
 type Row = Record<string, unknown>;
 function checksum(rows: Row[]) {

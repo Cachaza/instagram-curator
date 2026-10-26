@@ -52,12 +52,20 @@ test("PostgreSQL auth survives backup and restore with synthetic private files",
           assert.ok(originalPasswordHash);
           await db.execute("INSERT INTO app_settings(key,value_json,is_secret) VALUES ('synthetic.backup_fixture','{\\\"kept\\\":true}',0)");
 
+          await db.execute("INSERT INTO publications(id,source_url,processing_status) VALUES ('map-backup','https://www.instagram.com/reel/mapbackup/','analyzed')");
+          await db.execute("INSERT INTO restaurant_geocodes(cache_key,candidates_json) VALUES ('synthetic-cache','[]')");
+          await db.execute("INSERT INTO geocoding_service_requests(service_url,requested_at) VALUES ('https://synthetic.example.invalid/search',CURRENT_TIMESTAMP)");
+          await db.execute("INSERT INTO restaurant_locations(publication_id,place_key,location_json,confirmed_by_user_id) VALUES ('map-backup','synthetic-place','{\\\"latitude\\\":0,\\\"longitude\\\":0}', $1)",[signupBody.user.id]);
+
           const backup = spawnSync('node', ['--import', 'tsx', 'scripts/backup.ts', backupDir], {
             cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, DATABASE_URL: sourceUrl, CURATOR_DATA_DIR: dataDir, BETTER_AUTH_SECRET: secret },
           });
           assert.equal(backup.status, 0, backup.stderr + backup.stdout);
           const exported = JSON.parse(readFileSync(join(backupDir, 'library.json'), 'utf8'));
           assert.equal(exported.format, 2);
+          assert.equal(exported.tables.restaurant_locations.length,1);
+          assert.equal(exported.tables.restaurant_geocodes.length,1);
+          assert.equal(exported.tables.geocoding_service_requests.length,1);
           assert.ok(exported.tables.user.some(row => row.email === 'admin@example.invalid' && row.role === 'admin'));
           assert.ok(exported.tables.account.some(row => row.userId === signupBody.user.id && row.password === originalPasswordHash));
           assert.ok(exported.tables.app_settings.some(row => row.key === 'synthetic.backup_fixture' && row.value_json === '{"kept":true}'));
@@ -83,6 +91,9 @@ test("PostgreSQL auth survives backup and restore with synthetic private files",
             "const { db, pool } = await import('./src/lib/db.ts');",
             "assert.ok((await db.one('SELECT a.password FROM account a JOIN \\\"user\\\" u ON u.id=a.\\\"userId\\\" WHERE u.email=$1', ['admin@example.invalid'])).password);",
             "assert.deepEqual(await db.one('SELECT value_json FROM app_settings WHERE key=$1', ['synthetic.backup_fixture']), { value_json: '{\\\"kept\\\":true}' });",
+            "assert.equal((await db.one('SELECT COUNT(*) count FROM restaurant_locations')).count,1);",
+            "assert.equal((await db.one('SELECT COUNT(*) count FROM restaurant_geocodes')).count,1);",
+            "assert.equal((await db.one('SELECT COUNT(*) count FROM geocoding_service_requests')).count,1);",
             'await pool.end();',
           ].join('\\n');
           const verifyRestored = spawnSync('node', ['--import', 'tsx', '--input-type=module', '-e', verifyCode], {
@@ -113,4 +124,43 @@ test("PostgreSQL auth survives backup and restore with synthetic private files",
       expect(result.status, result.stderr + result.stdout).toBe(0);
     });
   });
+});
+
+test("restore accepts pre-map backups but rejects missing map tables in upgraded backups", async () => {
+  await withPostgresDatabase(async (sourceUrl) => withPostgresDatabase(async (targetUrl) => {
+    const result = runPostgresScript(`
+      import assert from 'node:assert/strict';
+      import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
+      import {tmpdir} from 'node:os';
+      import {join} from 'node:path';
+      import {spawnSync} from 'node:child_process';
+      import {createHash} from 'node:crypto';
+      import {db,pool,authPool,migrateAppDatabase} from './src/lib/db.ts';
+      await migrateAppDatabase();
+      await db.execute("INSERT INTO app_settings(key,value_json) VALUES ('legacy-fixture','true')");
+      const backupDir=mkdtempSync(join(tmpdir(),'curator-legacy-backup-'));
+      try {
+        const backup=spawnSync('node',['--import','tsx','scripts/backup.ts',backupDir],{env:process.env,encoding:'utf8'});
+        assert.equal(backup.status,0,backup.stderr);
+        const data=JSON.parse(readFileSync(join(backupDir,'library.json'),'utf8'));
+        const manifest=JSON.parse(readFileSync(join(backupDir,'manifest.json'),'utf8'));
+        delete data.tables.restaurant_locations;
+        const writeSnapshot=()=>{
+          const json=JSON.stringify(data);manifest.sha256=createHash('sha256').update(json).digest('hex');
+          writeFileSync(join(backupDir,'library.json'),json);
+          writeFileSync(join(backupDir,'manifest.json'),JSON.stringify(manifest));
+        };
+        writeSnapshot();
+        const env={...process.env,DATABASE_URL:${JSON.stringify(targetUrl)},CURATOR_DATA_DIR:join(backupDir,'target')};
+        const refused=spawnSync('node',['--import','tsx','scripts/restore.ts',backupDir,'--confirm'],{env,encoding:'utf8'});
+        assert.notEqual(refused.status,0);assert.match(refused.stderr,/Backup is missing table restaurant_locations/);
+        delete data.tables.restaurant_geocodes;delete data.tables.geocoding_service_requests;
+        data.tables.schema_migrations=data.tables.schema_migrations.filter(row=>row.version<6);
+        writeSnapshot();
+        const restored=spawnSync('node',['--import','tsx','scripts/restore.ts',backupDir,'--confirm'],{env,encoding:'utf8'});
+        assert.equal(restored.status,0,restored.stderr);
+      } finally {await pool.end();await authPool.end();rmSync(backupDir,{recursive:true,force:true});}
+    `, sourceUrl);
+    expect(result.status, result.stderr).toBe(0);
+  }));
 });
