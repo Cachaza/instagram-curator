@@ -97,6 +97,32 @@ docker run -d \
 Versioned images are published as `ghcr.io/cachaza/instagram-curator:0.2.3`,
 `0.2`, `0`, and `latest`.
 
+### Build on the Mac and deploy through a registry
+
+Production images are built locally and pushed to GHCR. GitHub Actions does not
+build or publish them. Log in to the registry with Docker's credential store,
+then publish a committed revision:
+
+```bash
+git fetch origin main
+bash scripts/publish-local-image.sh origin/main
+```
+
+The script exports a clean Git archive, builds `linux/amd64` for the current
+Dokploy server, and pushes `ghcr.io/cachaza/instagram-curator:sha-<full-commit>`.
+It excludes uncommitted changes and prints the published image digest. Set
+`CURATOR_IMAGE` or `CURATOR_IMAGE_PLATFORM` to target another registry or platform.
+Build-time database and auth state are removed before assembling the runtime
+image; persistent state belongs in the mounted data volume.
+
+In Dokploy, use the **Docker image** source and the printed
+`ghcr.io/cachaza/instagram-curator@sha256:…` reference. Deploying pulls that exact
+image without compiling on the server. Keep the existing environment, `/app/data`
+volume, command override and Traefik domain. For this web-only installation the
+command runs `bun run start:web`; transcription and analysis workers stay off.
+Keep the prior digest to roll back the application image. Database rollback, if
+needed, is a separate restore from a consistent backup.
+
 Open `CURATOR_BASE_URL`. On a completely empty installation Curator creates its
 database automatically, and the first registered account becomes the
 administrator. Public registration closes immediately after that first
