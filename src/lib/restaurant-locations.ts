@@ -5,12 +5,42 @@ import { candidateSchema } from "./geocoding";
 import { restaurantPlaceQuery, restaurantPlaces, type RestaurantPlace } from "./restaurant-places";
 import { z } from "zod";
 
+// Review state belongs to the saved pin, rather than the provider candidate.
+const savedLocationSchema = candidateSchema.extend({ needsReconfirmation: z.boolean().optional() });
+
 export async function listRestaurantPlaces(items: ContentItem[]): Promise<RestaurantPlace[]> {
   const places = items.flatMap(restaurantPlaces);
   if (!places.length) return [];
   const rows = await db.all("SELECT publication_id,place_key,location_json FROM restaurant_locations WHERE publication_id=ANY($1::text[])", [[...new Set(places.map((place) => place.publicationId))]]);
-  const locations = new Map(rows.map((row) => [JSON.stringify([row.publication_id, row.place_key]), candidateSchema.parse(JSON.parse(row.location_json))]));
+  const locations = new Map(rows.map((row) => {
+    const saved = savedLocationSchema.parse(JSON.parse(row.location_json));
+    return [JSON.stringify([row.publication_id, row.place_key]), saved.needsReconfirmation ? null : candidateSchema.parse(saved)] as const;
+  }));
   return places.map((place) => ({ ...place, location: locations.get(JSON.stringify([place.publicationId, place.key])) ?? null }));
+}
+
+export async function reconfirmChangedRestaurantLocations(before: ContentItem | null, after: ContentItem, database: Database) {
+  const rows = await database.all("SELECT place_key,location_json FROM restaurant_locations WHERE publication_id=$1", [after.id]);
+  const previous = new Map((before ? restaurantPlaces(before) : []).map((place) => [place.key, restaurantPlaceQuery(place)]));
+  const current = new Map(restaurantPlaces(after).map((place) => [place.key, restaurantPlaceQuery(place)]));
+  for (const row of rows) {
+    if (!previous.has(row.place_key) || previous.get(row.place_key) !== current.get(row.place_key)) {
+      const saved = savedLocationSchema.parse(JSON.parse(row.location_json));
+      await database.execute("UPDATE restaurant_locations SET location_json=$1 WHERE publication_id=$2 AND place_key=$3", [JSON.stringify({ ...saved, needsReconfirmation: true }), after.id, row.place_key]);
+    }
+  }
+}
+
+export async function listRestaurantLocationsNeedingConfirmation() {
+  const rows = await db.all("SELECT publication_id,place_key,location_json FROM restaurant_locations");
+  const changes = [];
+  for (const row of rows) {
+    const item = await getContent(row.publication_id);
+    if (!item || item.reviewStatus === "discarded") continue;
+    const saved = savedLocationSchema.parse(JSON.parse(row.location_json));
+    if (saved.needsReconfirmation || !restaurantPlaces(item).some((place) => place.key === row.place_key)) changes.push({ publicationId: item.id, placeKey: row.place_key, location: candidateSchema.parse(saved) });
+  }
+  return changes;
 }
 
 export async function requireRestaurantPlace(publicationId: string, key: string, database: Database = db) {

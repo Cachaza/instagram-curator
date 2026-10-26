@@ -100,7 +100,7 @@ const SELECT = `
   LEFT JOIN publication_reviews r ON r.publication_id=p.id
 `;
 
-const VISIBLE_CONTENT = `(p.processing_status='analyzed' OR
+const VISIBLE_CONTENT = `(a.publication_id IS NOT NULL OR p.processing_status='analyzed' OR
   (p.processing_status='ready_for_analysis' AND
     (NULLIF(trim(p.caption),'') IS NOT NULL OR NULLIF(trim(p.transcript_text),'') IS NOT NULL)))`;
 
@@ -142,7 +142,6 @@ export async function categories() {
     SELECT COALESCE(r.corrected_category,a.category) category,COUNT(*)::int count
     FROM analyses a JOIN publications p ON p.id=a.publication_id
     LEFT JOIN publication_reviews r ON r.publication_id=p.id
-    WHERE p.processing_status='analyzed'
     GROUP BY COALESCE(r.corrected_category,a.category) ORDER BY count DESC
   `,[])) as Array<{ category: string; count: number }>;
 }

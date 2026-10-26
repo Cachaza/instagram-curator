@@ -1,5 +1,6 @@
 export const restaurantMessages = {
   es: {
+    locationChanges: "Ubicaciones por reconfirmar", locationChangesHelp: "Un nuevo análisis cambió los datos de estos lugares. Las ubicaciones anteriores se conservan; compruébalas antes de confirmar una ubicación para el resultado nuevo.", previousLocation: "Ver ubicación anterior",
     mapSettings: "Mapas", saveSettings: "Guardar ajustes del mapa", settingsSaved: "Ajustes del mapa guardados.", settingsNotSaved: "El navegador no permite guardar los ajustes. Revisa los permisos de almacenamiento y vuelve a intentarlo.", tokenForgotten: "Token eliminado. Se usará OpenStreetMap.",
     searchProviderHelp: "Este ajuste cambia el mapa base. La búsqueda de direcciones usa OpenStreetMap con ambos proveedores.",
     zoomIn: "Acercar", zoomOut: "Alejar", mapProvider: "Mapa", publicToken: "Token público de Mapbox", useMapbox: "Usar Mapbox", forgetToken: "Olvidar token",
@@ -23,6 +24,7 @@ export const restaurantMessages = {
     providerError: "No se pudo cargar la búsqueda. Puedes consultar la publicación e intentarlo de nuevo.",
   },
   en: {
+    locationChanges: "Locations to reconfirm", locationChangesHelp: "A new analysis changed the details of these places. Previous locations are preserved; check them before confirming a location for the new result.", previousLocation: "View previous location",
     mapSettings: "Maps", saveSettings: "Save map settings", settingsSaved: "Map settings saved.", settingsNotSaved: "The browser could not save these settings. Check storage permissions and try again.", tokenForgotten: "Token removed. OpenStreetMap will be used.",
     searchProviderHelp: "This setting changes the base map. Address search uses OpenStreetMap with either provider.",
     zoomIn: "Zoom in", zoomOut: "Zoom out", mapProvider: "Map", publicToken: "Mapbox public token", useMapbox: "Use Mapbox", forgetToken: "Forget token",

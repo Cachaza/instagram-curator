@@ -7,6 +7,7 @@ import { PublicationActions } from "@/components/publication-actions";
 import { getContent } from "@/lib/content";
 import { requireSession } from "@/lib/session";
 import { dictionary } from "@/lib/i18n";
+import { nestedRecipes, recipeIngredients, recipeSteps } from "@/lib/recipe-entities";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +25,6 @@ function record(value: unknown): EntityRecord | null {
     try { return record(JSON.parse(value)); } catch { return null; }
   }
   return value && typeof value === "object" && !Array.isArray(value) ? value as EntityRecord : null;
-}
-
-function records(value: unknown): EntityRecord[] {
-  if (!Array.isArray(value)) return [];
-  return value.map(record).filter((item): item is EntityRecord => Boolean(item));
 }
 
 function text(value: unknown): string | null {
@@ -56,35 +52,32 @@ function label(key: string): string {
   return labels[key] ?? key.replaceAll("_", " ");
 }
 
-function IngredientList({ value }: { value: unknown }) {
-  const ingredients = records(value);
+function IngredientList({ value, suffix = "" }: { value: unknown; suffix?: string }) {
+  const ingredients = recipeIngredients(value);
   if (!ingredients.length) return null;
   return (
-    <section className="recipe-section" aria-labelledby="ingredients-title">
+    <section className="recipe-section" aria-labelledby={`ingredients-title${suffix}`}>
       <div className="section-heading-row">
-        <div><span>Preparación</span><h2 id="ingredients-title">Ingredientes</h2></div>
+        <div><span>Preparación</span><h2 id={`ingredients-title${suffix}`}>Ingredientes</h2></div>
         <small>{ingredients.length} elementos</small>
       </div>
       <ul className="ingredient-list">
         {ingredients.map((ingredient, index) => {
-          const name = text(ingredient.name) ?? `Ingrediente ${index + 1}`;
+          const name = ingredient.name;
           const amount = [text(ingredient.quantity), text(ingredient.unit)].filter(Boolean).join(" ");
-          return <li key={`${name}-${index}`}><Check aria-hidden="true" /><span><strong>{name}</strong>{amount && <small>{amount}</small>}</span>{ingredient.optional === true && <em>Opcional</em>}</li>;
+          return <li key={`${name}-${index}`}><Check aria-hidden="true" /><span><strong>{name}</strong>{amount && <small>{amount}</small>}{ingredient.section && <small>{ingredient.section}</small>}{ingredient.notes && <small>{ingredient.notes}</small>}{ingredient.source && <small>{ingredient.source}</small>}</span>{ingredient.optional === true && <em>Opcional</em>}</li>;
         })}
       </ul>
     </section>
   );
 }
 
-function RecipeSteps({ value }: { value: unknown }) {
-  const steps = records(value)
-    .map((step, index) => ({ position: Number(step.position) || index + 1, instruction: text(step.instruction) }))
-    .filter((step): step is { position: number; instruction: string } => Boolean(step.instruction))
-    .sort((a, b) => a.position - b.position);
+function RecipeSteps({ value, suffix = "" }: { value: unknown; suffix?: string }) {
+  const steps = recipeSteps(value);
   if (!steps.length) return null;
   return (
-    <section className="recipe-section" aria-labelledby="steps-title">
-      <div className="section-heading-row"><div><span>En la cocina</span><h2 id="steps-title">Paso a paso</h2></div></div>
+    <section className="recipe-section" aria-labelledby={`steps-title${suffix}`}>
+      <div className="section-heading-row"><div><span>En la cocina</span><h2 id={`steps-title${suffix}`}>Paso a paso</h2></div></div>
       <ol className="recipe-steps">
         {steps.map((step) => <li key={`${step.position}-${step.instruction}`}><span>{step.position}</span><p>{step.instruction}</p></li>)}
       </ol>
@@ -138,8 +131,9 @@ export default async function PublicationPage({ params }: { params: Promise<{ id
   const CategoryIcon = meta.Icon;
   const isRecipe = item.category === "recipe";
   const isRestaurant = item.category === "restaurant";
+  const recipes = nestedRecipes(item.entities);
   const hiddenEntityKeys = new Set(isRecipe
-    ? ["dish_name", "ingredients", "steps"]
+    ? ["dish_name", "ingredients", "steps", "recipe", "recipes"]
     : isRestaurant ? ["mentioned_places", "restaurant_name", "address_as_stated"] : []);
   const remainingEntities = Object.entries(item.entities).filter(([key, value]) =>
     !hiddenEntityKeys.has(key) && value != null && value !== "" && (!Array.isArray(value) || value.length > 0));
@@ -163,6 +157,7 @@ export default async function PublicationPage({ params }: { params: Promise<{ id
           {isRecipe && <div className="knowledge-mode-heading"><Utensils /><div><span>Modo receta</span><strong>{text(item.entities.dish_name) ?? item.title}</strong></div></div>}
           {isRecipe && <IngredientList value={item.entities.ingredients} />}
           {isRecipe && <RecipeSteps value={item.entities.steps} />}
+          {isRecipe && recipes.map((recipe, index) => <section key={index}>{text(recipe.name) && <h2>{text(recipe.name)}</h2>}<IngredientList value={recipe.ingredients} suffix={`-${index}`} /><RecipeSteps value={recipe.steps} suffix={`-${index}`} /></section>)}
           {isRestaurant && <RestaurantPlaces entities={item.entities} />}
           {remainingEntities.length > 0 && <section><h2>{isRecipe || isRestaurant ? "Información adicional" : "Detalles"}</h2><div className="entity-grid">{remainingEntities.map(([key, value]) => <div key={key}><strong>{label(key)}</strong><EntityView value={value} /></div>)}</div></section>}
           <section><h2>Descripción visual</h2><p>{item.visualDescription}</p></section>

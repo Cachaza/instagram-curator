@@ -1,10 +1,13 @@
 import { resolve } from "node:path";
+import { existsSync } from "node:fs";
 import { db, transaction, type Database } from "@/lib/db";
 import { dataDir } from "@/lib/paths";
 import { getSetting } from "@/lib/settings";
 import { codexAccountStatus } from "@/lib/codex/account";
 import { normalizeFacets } from "@/lib/facets";
 import { runCodexAnalysis } from "./codex-analysis";
+import { getContent } from "@/lib/content";
+import { reconfirmChangedRestaurantLocations } from "@/lib/restaurant-locations";
 
 type Publication = {
   id: string;
@@ -84,7 +87,10 @@ Return only the structured result requested by the output schema, in ${locale ==
 Use only the supplied caption, transcript and image. Never invent ratings, exact prices, addresses, ingredients, quantities or claims not supported by the source.
 For restaurants capture entities.mentioned_places as an array of {"name":"restaurant name","location_hint":"address, city or area explicitly stated, or null"}. Include every named restaurant; never infer a city or coordinates. Capture restaurant facets only when evidenced. Use this exact facet shape:
 {"restaurant":{"cuisine":[],"budget":null,"occasion":[],"features":[]}}
-For recipes capture dish_name, ingredients and steps. Use this exact facet shape:
+For recipes capture dish_name, ingredients and steps. Use this exact entities shape:
+{"dish_name":"dish name or null","ingredients":[{"name":"ingredient as stated","quantity":null,"unit":null,"optional":false}],"steps":[{"position":1,"instruction":"one preparation step"}]}
+Include every ingredient, quantity and preparation step explicitly supported by the caption, transcript or image. Read written recipe lists in the caption and image as well as the spoken audio. Keep quantities and units as stated; use null when absent. Never fill gaps with a plausible recipe or infer missing cooking times. Do not return ingredients or steps as plain strings or nested section/item groups. If the source is incomplete, retain the evidenced ingredients/steps and explain the specific missing information in review_reason.
+Use this exact facet shape:
 {"recipe":{"nutritionGoals":[],"foodStyles":[],"mealType":null,"dietaryTags":[],"estimatedTimeMinutes":null}}
 Allowed nutritionGoals values: bulking, cutting, maintenance, high-protein.
 Allowed foodStyles values: gym, gourmet, meal-prep, everyday, comfort-food. Classify meal-prep only when preparing portions ahead is a defining purpose, not merely because the recipe can be stored.
@@ -112,7 +118,12 @@ export async function processNextAnalysis(): Promise<boolean> {
       { type: "text", text: prompt(item, await getSetting("analysis.locale", "es")), text_elements: [] },
     ];
     if (item.contact_sheet_path) {
-      inputs.push({ type: "localImage", path: resolve(dataDir, item.contact_sheet_path), detail: "high" });
+      const imagePath = resolve(dataDir, item.contact_sheet_path);
+      if (existsSync(imagePath)) inputs.push({ type: "localImage", path: imagePath, detail: "high" });
+      else {
+        await addEvent(item.id, "analyzing", "input_warning", "Contact sheet unavailable on this worker; analysis uses the saved caption and transcript only.");
+        inputs.push({ type: "text", text: "The source contact sheet is unavailable. Analyze only the supplied caption and transcript; do not infer visual details.", text_elements: [] });
+      }
     }
     const finalText = await runCodexAnalysis(item.id, inputs, outputSchema);
     const wire = JSON.parse(finalText) as WireAnalysis;
@@ -125,6 +136,7 @@ export async function processNextAnalysis(): Promise<boolean> {
     const locale = await getSetting("analysis.locale", "es");
     await transaction(async (tx) => {
       if (!await tx.one("SELECT id FROM publications WHERE id=$1 FOR UPDATE",[item.id])) throw new Error("Publication was removed during analysis");
+      const previous = await getContent(item.id, tx);
       (await tx.execute("INSERT INTO analysis_versions(publication_id,analysis_json,source) VALUES ($1,$2,$3)",[item.id,JSON.stringify(analysis),"codex"]));
       (await tx.execute(`
         INSERT INTO analyses(
@@ -142,19 +154,21 @@ export async function processNextAnalysis(): Promise<boolean> {
           review_reason=excluded.review_reason,codex_notes=excluded.codex_notes,
           prompt_version=excluded.prompt_version,output_locale=excluded.output_locale,
           analyzed_at=CURRENT_TIMESTAMP
-      `,[item.id,analysis.category,analysis.subcategory,analysis.title,analysis.summary,analysis.visual_description,analysis.why_interesting,analysis.next_action,analysis.action_status,JSON.stringify(analysis.tags),JSON.stringify(analysis.entities),JSON.stringify(analysis.facets),analysis.confidence,analysis.needs_review ? 1 : 0,analysis.review_reason,analysis.codex_notes,"v4",locale]));
+      `,[item.id,analysis.category,analysis.subcategory,analysis.title,analysis.summary,analysis.visual_description,analysis.why_interesting,analysis.next_action,analysis.action_status,JSON.stringify(analysis.tags),JSON.stringify(analysis.entities),JSON.stringify(analysis.facets),analysis.confidence,analysis.needs_review ? 1 : 0,analysis.review_reason,analysis.codex_notes,"v5",locale]));
       (await tx.execute(`
         UPDATE publications SET processing_status='analyzed',current_stage='analyzed',
           action_status=$1,review_status='unreviewed',last_error=NULL,updated_at=CURRENT_TIMESTAMP
         WHERE id=$2
       `,[analysis.action_status,item.id]));
       await addEvent(item.id, "analyzed", "transition", "Codex analysis completed", tx);
+      const current = await getContent(item.id, tx);
+      if (current) await reconfirmChangedRestaurantLocations(previous, current, tx);
     });
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     (await db.execute(`
-      UPDATE publications SET processing_status='failed',current_stage='analyzing',
+      UPDATE publications SET processing_status=CASE WHEN EXISTS (SELECT 1 FROM analyses WHERE publication_id=$2) THEN 'analyzed' ELSE 'failed' END,current_stage='analyzing',
         attempts=attempts+1,last_error=$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2
     `,[message.slice(0, 4_000),item.id]));
     await addEvent(item.id, "analyzing", "error", message.slice(0, 4_000));
