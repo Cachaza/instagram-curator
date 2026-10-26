@@ -4,6 +4,11 @@ RUN npm install -g bun@1.3.0 @openai/codex \
   && apt-get install -y --no-install-recommends ffmpeg python3 python3-pip \
   && python3 -m pip install --break-system-packages yt-dlp gallery-dl instaloader \
   && rm -rf /var/lib/apt/lists/*
+# Bun 1.3's installer selects AVX2 under Mac emulation; the production KVM CPU
+# cannot execute that binary. Its installed baseline variant runs on both hosts.
+RUN if [ "$(node -p 'process.arch')" = x64 ]; then \
+      cp /usr/local/lib/node_modules/bun/node_modules/@oven/bun-linux-x64-baseline/bin/bun "$(command -v bun)"; \
+    fi
 WORKDIR /app
 
 FROM base AS build

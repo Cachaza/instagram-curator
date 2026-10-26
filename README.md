@@ -114,6 +114,8 @@ It excludes uncommitted changes and prints the published image digest. Set
 `CURATOR_IMAGE` or `CURATOR_IMAGE_PLATFORM` to target another registry or platform.
 Build-time database and auth state are removed before assembling the runtime
 image; persistent state belongs in the mounted data volume.
+The pinned Bun 1.3 runtime uses its baseline x64 binary so building under Mac
+emulation does not select an AVX2 binary that fails on the older KVM host.
 
 In Dokploy, use the **Docker image** source and the printed
 `ghcr.io/cachaza/instagram-curator@sha256:…` reference. Deploying pulls that exact
