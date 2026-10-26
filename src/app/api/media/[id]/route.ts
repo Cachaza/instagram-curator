@@ -12,8 +12,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await context.params;
-  const row = db.prepare("SELECT contact_sheet_path,video_path,audio_path FROM publications WHERE id=?")
-    .get(id) as { contact_sheet_path: string | null; video_path: string | null; audio_path: string | null } | undefined;
+  const row = await db.one<{ contact_sheet_path: string | null; video_path: string | null; audio_path: string | null }>("SELECT contact_sheet_path,video_path,audio_path FROM publications WHERE id=$1", [id]);
   const kind = new URL(request.url).searchParams.get("kind");
   const stored = kind === "video" ? row?.video_path : kind === "audio" ? row?.audio_path : row?.contact_sheet_path;
   const resolvedPath = resolveMediaPath(stored ?? null);

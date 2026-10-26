@@ -26,10 +26,10 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const publication = db.prepare(`
+  const publication = await db.one<PublicationFiles>(`
     SELECT video_path,audio_path,transcript_path,contact_sheet_path,frames_json
-    FROM publications WHERE id=?
-  `).get(id) as PublicationFiles | undefined;
+    FROM publications WHERE id=$1
+  `, [id]);
   if (!publication) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   let frames: unknown = [];
@@ -42,7 +42,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     ...(Array.isArray(frames) ? frames.filter((path): path is string => typeof path === "string") : []),
   ].filter((path): path is string => Boolean(path));
 
-  db.prepare("DELETE FROM publications WHERE id=?").run(id);
+  await db.execute("DELETE FROM publications WHERE id=$1", [id]);
 
   const cleanup = await Promise.allSettled(
     [...new Set(storedPaths)].map((stored) => {

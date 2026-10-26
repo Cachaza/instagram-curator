@@ -1,7 +1,8 @@
 import { accessSync, constants, mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { dataDir, databasePath } from "./paths";
+import { dataDir } from "./paths";
+import { db } from "./db";
 import { getSetting } from "./settings";
 import { codexAccountStatus } from "./codex/account";
 import { dictionary } from "./i18n";
@@ -15,7 +16,7 @@ function binary(id: string, label: string, command: string, args = ["--version"]
 }
 
 export async function systemDiagnostics(): Promise<Diagnostic[]> {
-  const t = dictionary();
+  const t = await dictionary();
   const webOnly = process.env.CURATOR_WEB_ONLY === "1";
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   let storage = true;
@@ -30,35 +31,37 @@ export async function systemDiagnostics(): Promise<Diagnostic[]> {
       codexAccount.detail = error instanceof Error ? error.message : String(error);
     }
   }
+  let database = false;
+  try { database = Boolean(await db.one("SELECT 1 AS connected")); } catch { /* Never expose a connection URL or password in diagnostics. */ }
   return [
-    { id: "sqlite", label: "SQLite", ok: true, detail: databasePath },
+    { id: "postgresql", label: "PostgreSQL", ok: database, detail: database ? "Connected" : "Check DATABASE_URL and private network access" },
     { id: "storage", label: t.diagnostics.storage, ok: storage, detail: storage ? join(dataDir, "media") : t.diagnostics.noWrite },
-    binary("ffmpeg", "FFmpeg", getSetting("media.ffmpeg_bin", "ffmpeg"), ["-version"]),
-    binary("ffprobe", "FFprobe", getSetting("media.ffprobe_bin", "ffprobe"), ["-version"]),
+    binary("ffmpeg", "FFmpeg", await getSetting("media.ffmpeg_bin", "ffmpeg"), ["-version"]),
+    binary("ffprobe", "FFprobe", await getSetting("media.ffprobe_bin", "ffprobe"), ["-version"]),
     ...webOnly ? [] : [
-      binary("ytdlp", "yt-dlp", getSetting("instagram.ytdlp_bin", "yt-dlp")),
-      binary("gallerydl", "gallery-dl", getSetting("instagram.gallery_dl_bin", "gallery-dl")),
+      binary("ytdlp", "yt-dlp", await getSetting("instagram.ytdlp_bin", "yt-dlp")),
+      binary("gallerydl", "gallery-dl", await getSetting("instagram.gallery_dl_bin", "gallery-dl")),
     ],
-    { id: "instagram", label: t.diagnostics.instagram, ok: !webOnly && Boolean(getSetting("instagram.cookies_from_browser", "") || getSetting("instagram.cookie_file", "") || getSetting("instagram.instaloader_session_file", "")), detail: webOnly ? t.runtime.externalCheck : t.diagnostics.instagramHelp, external: webOnly },
-    transcriptionDiagnostic(webOnly),
+    { id: "instagram", label: t.diagnostics.instagram, ok: !webOnly && Boolean(await getSetting("instagram.cookies_from_browser", "") || await getSetting("instagram.cookie_file", "") || await getSetting("instagram.instaloader_session_file", "")), detail: webOnly ? t.runtime.externalCheck : t.diagnostics.instagramHelp, external: webOnly },
+    await transcriptionDiagnostic(webOnly),
     codexBinary,
     codexAccount,
   ];
 }
 
-export function transcriptionDiagnostic(webOnly = process.env.CURATOR_WEB_ONLY === "1"): Diagnostic {
-  const t = dictionary();
-  const provider = getSetting<string>("transcription.provider", "openai");
+export async function transcriptionDiagnostic(webOnly = process.env.CURATOR_WEB_ONLY === "1"): Promise<Diagnostic> {
+  const t = await dictionary();
+  const provider = await getSetting<string>("transcription.provider", "openai");
   const label = provider === "local" ? t.diagnostics.local : t.diagnostics.openai;
   if (webOnly) return { id: "transcription", label, ok: false, external: true, detail: t.runtime.externalCheck };
   if (provider === "local") {
-    const command = getSetting<unknown>("transcription.local_command", []);
+    const command = await getSetting<unknown>("transcription.local_command", []);
     if (!Array.isArray(command) || !command.length || !command.every((arg) => typeof arg === "string") || !command[0]) {
       return { id: "transcription", label, ok: false, detail: t.diagnostics.noLocalCommand };
     }
     return binary("transcription", label, command[0]);
   }
   if (provider !== "openai") return { id: "transcription", label, ok: false, detail: `${t.diagnostics.unsupportedProvider}: ${provider}` };
-  const configured = Boolean(getSetting("transcription.openai_api_key", ""));
-  return { id: "transcription", label, ok: configured, detail: configured ? `${t.diagnostics.model} ${getSetting("transcription.model", "whisper-1")}` : t.diagnostics.noApiKey };
+  const configured = Boolean(await getSetting("transcription.openai_api_key", ""));
+  return { id: "transcription", label, ok: configured, detail: configured ? `${t.diagnostics.model} ${await getSetting("transcription.model", "whisper-1")}` : t.diagnostics.noApiKey };
 }

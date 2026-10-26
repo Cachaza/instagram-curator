@@ -5,7 +5,7 @@ import { getWorkerConfig } from "./config";
 import { runCommand } from "./process";
 
 export async function transcribe(audioPath: string, outputPath: string): Promise<string> {
-  const workerConfig = getWorkerConfig();
+  const workerConfig = await getWorkerConfig();
   if (workerConfig.transcriptionProvider === "local") {
     const command = workerConfig.localTranscriptionCommand;
     if (!Array.isArray(command) || !command.length || command.some((arg) => typeof arg !== "string" || !arg)) {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { transaction } from "@/lib/db";
 import { getSetting, setSetting } from "@/lib/settings";
 import { codexAppServer } from "./app-server";
 
@@ -18,9 +18,15 @@ export const PreferencesSchema = z.object({
 }).strict();
 export type CodexPreferences = z.infer<typeof PreferencesSchema>;
 
-export function codexPreferences(): CodexPreferences {
-  // Preserve the existing worker's medium effort until the user chooses another.
-  return { model: getSetting<string | null>("analysis.codex_model", null), effort: getSetting("analysis.codex_effort", "medium") };
+export async function codexPreferences(): Promise<CodexPreferences> {
+  // Both values must come from the same committed snapshot across hosts.
+  return transaction(async (tx) => {
+    await tx.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    return {
+      model: await getSetting<string | null>("analysis.codex_model", null, tx),
+      effort: await getSetting("analysis.codex_effort", "medium", tx),
+    };
+  });
 }
 
 export async function listCodexModels(): Promise<CodexModel[]> {
@@ -45,9 +51,9 @@ export function validCodexPreferences(preferences: CodexPreferences, models: Cod
   return Boolean(model?.supportedReasoningEfforts.some((option) => option.reasoningEffort === preferences.effort));
 }
 
-export function saveCodexPreferences(preferences: CodexPreferences): void {
-  db.transaction(() => {
-    setSetting("analysis.codex_model", preferences.model);
-    setSetting("analysis.codex_effort", preferences.effort);
-  })();
+export async function saveCodexPreferences(preferences: CodexPreferences): Promise<void> {
+  await transaction(async (tx) => {
+    await setSetting("analysis.codex_model", preferences.model, false, tx);
+    await setSetting("analysis.codex_effort", preferences.effort, false, tx);
+  });
 }

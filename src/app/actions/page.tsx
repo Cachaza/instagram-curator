@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ActionsPage() {
   await requireSession();
-  const actions = [...listContent({ action: "action" }), ...listContent({ action: "someday" })];
+  const actions = [...await listContent({ action: "action" }), ...await listContent({ action: "someday" })];
   return (
     <div className="page-container">
       <section className="page-hero"><p className="section-kicker">PARA HACER</p><h1>Acciones<span>.</span></h1><p>Ideas que no querías limitarte a guardar.</p></section>

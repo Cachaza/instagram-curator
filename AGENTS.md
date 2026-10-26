@@ -2,7 +2,7 @@
 
 - Runtime: Next.js + TypeScript. Bun is the package manager; production Next.js
   uses its supported Node.js runtime.
-- SQLite is the source of truth.
+- PostgreSQL is the shared source of truth. SQLite is read only by migration tools.
 - Never commit SQLite files, Instagram sessions, cookies, Meta exports,
   downloaded media, transcripts, OpenAI keys, Codex credentials, or runtime
   secret files.

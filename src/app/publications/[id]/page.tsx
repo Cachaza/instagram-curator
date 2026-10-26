@@ -130,9 +130,9 @@ function RestaurantPlaces({ entities }: { entities: EntityRecord }) {
 
 export default async function PublicationPage({ params }: { params: Promise<{ id: string }> }) {
   await requireSession();
-  const t = dictionary();
+  const t = await dictionary();
   const { id } = await params;
-  const item = getContent(id);
+  const item = await getContent(id);
   if (!item) notFound();
   const meta = categoryInfo(item.category);
   const CategoryIcon = meta.Icon;

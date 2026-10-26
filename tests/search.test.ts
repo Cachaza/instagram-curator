@@ -27,7 +27,7 @@ describe("searchTerms", () => {
   });
 
   test("builds a safe prefix FTS query", () => {
-    expect(ftsQuery("Tarta de ques")).toBe('"tarta"* AND "ques"*');
+    expect(ftsQuery("Tarta de ques")).toBe("'tarta':* & 'ques':*");
   });
 
   test("limits overly broad queries", () => {

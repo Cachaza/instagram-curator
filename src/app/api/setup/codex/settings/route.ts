@@ -16,11 +16,11 @@ export async function GET() {
   ]);
   const catalog = models.status === "fulfilled" ? models.value : [];
   return NextResponse.json({
-    preferences: codexPreferences(), models: catalog,
+    preferences: await codexPreferences(), models: catalog,
     defaultModel: config.status === "fulfilled" ? config.value ?? catalog.find((m) => m.isDefault)?.model ?? null : null,
     limits: limits.status === "fulfilled" ? limits.value : null,
     accountTokens: accountTokens.status === "fulfilled" ? accountTokens.value : null,
-    usage: curatorUsage(),
+    usage: await curatorUsage(),
     errors: { models: models.status === "rejected", config: config.status === "rejected", limits: limits.status === "rejected", accountTokens: accountTokens.status === "rejected" },
   }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -33,7 +33,7 @@ export async function PUT(request: Request) {
     const [models, configured] = await Promise.all([listCodexModels(), parsed.data.model === null ? configuredCodexModel() : Promise.resolve(null)]);
     const defaultModel = configured ?? models.find((m) => m.isDefault)?.model ?? null;
     if (!validCodexPreferences(parsed.data, models, defaultModel)) return NextResponse.json({ error: "unsupported_model_or_effort" }, { status: 400 });
-    saveCodexPreferences(parsed.data);
+    await saveCodexPreferences(parsed.data);
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "catalog_unavailable" }, { status: 503 });
