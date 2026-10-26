@@ -56,7 +56,8 @@ export function restaurantPlaces(item: Pick<ContentItem, "id" | "category" | "en
     const hint = text(entry.location_hint) || text(entry.address_as_stated);
     const lookupHint = joinHints([...addressEvidence(entry), entities.city, ...(name === primaryName ? primaryEvidence : [])]);
     const key = JSON.stringify([name, hint]);
-    places.set(key, { publicationId: item.id, key, name, hint, lookupHint, location: null });
+    const combinedHint = joinHints([places.get(key)?.lookupHint, lookupHint]);
+    places.set(key, { publicationId: item.id, key, name, hint, lookupHint: combinedHint, location: null });
   }
   return [...places.values()];
 }

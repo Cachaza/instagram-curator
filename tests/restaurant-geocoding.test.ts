@@ -26,6 +26,10 @@ test("legacy nested venues and explicit locality/address fields retain source ev
   const mentioned = restaurantPlaces({ ...base, entities: { mentioned_places: [{ name: "Example", address_as_stated: "Calle Test", city: "Madrid" }] } })[0];
   expect(mentioned.key).toBe(JSON.stringify(["Example", "Calle Test"]));
   expect(mentioned.lookupHint).toBe("Calle Test, Madrid");
+  const duplicate = restaurantPlaces({ ...base, entities: { mentioned_places: [{ name: "Cafe Example", location_hint: "Calle Test", city: "Sevilla" }, { name: "Cafe Example", location_hint: "Calle Test", city: "Madrid" }] } });
+  expect(duplicate).toHaveLength(1);
+  expect(duplicate[0].lookupHint).toBe("Calle Test, Sevilla, Madrid");
+  expect(automaticRestaurantMatch(duplicate[0], [venue])).toBeNull();
 });
 
 test("batch persists safe pins, review outcomes and provider failures without overwriting saved locations", async () => {
@@ -96,6 +100,30 @@ test("cancelling an in-flight provider lookup aborts fetch and never saves or co
       assert.equal((await db.one("SELECT COUNT(*) count FROM pipeline_events WHERE event_type='batch_completed'")).count,0);
       assert.equal((await db.one("SELECT COUNT(*) count FROM pipeline_events WHERE event_type='failed' AND message::jsonb->>'reason'='cancelled'")).count,1);
       assert.equal((await db.one("SELECT COUNT(*) count FROM pipeline_events WHERE event_type='deferred'")).count,1);
+      await pool.end();await authPool.end();
+    `, url);
+    expect(result.status, result.stderr).toBe(0);
+  });
+});
+
+
+test("source evidence edited during lookup cannot receive the stale automatic pin", async () => {
+  await withPostgresDatabase(async (url) => {
+    const result = runPostgresScript(`
+      import assert from 'node:assert/strict';
+      import {db,pool,authPool,migrateAppDatabase} from './src/lib/db.ts';
+      import {geocodeRestaurantLibrary} from './src/lib/restaurant-geocoding.ts';
+      await migrateAppDatabase();
+      await db.execute("INSERT INTO publications(id,source_url,processing_status) VALUES ('a','https://www.instagram.com/reel/a/','analyzed')");
+      const entities=city=>JSON.stringify({restaurant_name:'Example',address_as_stated:'Calle Test',city});
+      await db.execute("INSERT INTO analyses(publication_id,category,title,summary,visual_description,confidence,entities_json) VALUES ('a','restaurant','Example','','',1,$1)",[entities('Madrid')]);
+      globalThis.fetch=async()=>{
+        await db.execute("UPDATE analyses SET entities_json=$1 WHERE publication_id='a'",[entities('Sevilla')]);
+        return new Response(JSON.stringify([{osm_type:'node',osm_id:1,display_name:'Example, Calle Test, Madrid',lat:'40',lon:'-3',category:'amenity',type:'restaurant'}]),{status:200});
+      };
+      await assert.rejects(geocodeRestaurantLibrary({runId:'edited-run'}),/stopped at stage geocoding/);
+      assert.equal((await db.one('SELECT COUNT(*) count FROM restaurant_locations')).count,0);
+      assert.equal((await db.one("SELECT COUNT(*) count FROM pipeline_events WHERE event_type='failed'")).count,1);
       await pool.end();await authPool.end();
     `, url);
     expect(result.status, result.stderr).toBe(0);

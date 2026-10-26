@@ -2,7 +2,7 @@ import type { ContentItem } from "./content";
 import { getContent } from "./content";
 import { db, transaction, type Database } from "./db";
 import { candidateSchema } from "./geocoding";
-import { restaurantPlaces, type RestaurantPlace } from "./restaurant-places";
+import { restaurantPlaceQuery, restaurantPlaces, type RestaurantPlace } from "./restaurant-places";
 import { z } from "zod";
 
 export async function listRestaurantPlaces(items: ContentItem[]): Promise<RestaurantPlace[]> {
@@ -20,12 +20,13 @@ export async function requireRestaurantPlace(publicationId: string, key: string,
   return place;
 }
 
-export async function saveRestaurantLocation(input: { publicationId: string; placeKey: string; cacheKey?: string; candidateId?: string }, userId: string, options: { onlyIfUnmapped?: boolean } = {}) {
+export async function saveRestaurantLocation(input: { publicationId: string; placeKey: string; cacheKey?: string; candidateId?: string }, userId: string, options: { onlyIfUnmapped?: boolean; expectedQuery?: string } = {}) {
   return transaction(async (tx) => {
     // Reviews and deletion lock this same publication. Recheck current source
     // identity after acquiring it so a changed address never receives a stale pin.
     await tx.one("SELECT id FROM publications WHERE id=$1 FOR UPDATE", [input.publicationId]);
-    await requireRestaurantPlace(input.publicationId, input.placeKey, tx);
+    const currentPlace = await requireRestaurantPlace(input.publicationId, input.placeKey, tx);
+    if (options.expectedQuery !== undefined && restaurantPlaceQuery(currentPlace) !== options.expectedQuery) throw new Error("restaurant_place_evidence_changed");
     if (options.onlyIfUnmapped && await tx.one("SELECT 1 FROM restaurant_locations WHERE publication_id=$1 AND place_key=$2", [input.publicationId, input.placeKey])) return false;
     if (!input.cacheKey || !input.candidateId) {
       await tx.execute("DELETE FROM restaurant_locations WHERE publication_id=$1 AND place_key=$2", [input.publicationId, input.placeKey]);

@@ -72,7 +72,7 @@ export async function geocodeRestaurantLibrary(options: { runId?: string; signal
         const candidate = automaticRestaurantMatch(place, result.candidates);
         if (candidate) {
           options.signal?.throwIfAborted();
-          const saved = await saveRestaurantLocation({ publicationId: place.publicationId, placeKey: place.key, cacheKey: result.cacheKey, candidateId: candidate.id }, `system:geocoding:${runId}`, { onlyIfUnmapped: true });
+          const saved = await saveRestaurantLocation({ publicationId: place.publicationId, placeKey: place.key, cacheKey: result.cacheKey, candidateId: candidate.id }, `system:geocoding:${runId}`, { onlyIfUnmapped: true, expectedQuery: query });
           if (saved) stats.saved++; else stats.preserved++;
           await event(place.publicationId, saved ? "located" : "preserved", { placeKey: place.key, candidateId: candidate.id });
         } else {
