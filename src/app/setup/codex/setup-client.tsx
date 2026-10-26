@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { messages, type Locale } from "@/lib/messages";
+import { CodexModelUsage } from "./model-usage";
 
 type Status = { connected?: boolean; available?: boolean; error?: string; account?: Record<string, unknown> };
 type Login = { loginId: string; verificationUrl: string; userCode: string };
@@ -36,7 +37,7 @@ export function CodexSetup({ locale, webOnly }: { locale: Locale; webOnly: boole
   }
 
   if (status.connected) {
-    return <div className="token-panel success-panel"><h2>{t.codex.connected}</h2><p>{webOnly ? t.runtime.webOnly : t.codex.active}</p><a className="primary" href="/pipeline">{t.codex.pipeline}</a></div>;
+    return <><div className="token-panel success-panel"><h2>{t.codex.connected}</h2><p>{webOnly ? t.runtime.webOnly : t.codex.active}</p><a className="primary" href="/pipeline">{t.codex.pipeline}</a></div><CodexModelUsage locale={locale} /></>;
   }
   return (
     <div className="token-panel">

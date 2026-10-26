@@ -107,6 +107,17 @@ input:focus, select:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba
 .error { color: var(--red); margin: 0; font-size: 14px; }
 .two-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .token-panel { display: grid; gap: 14px; margin-top: 28px; }
+.codex-model-usage { border-top: 1px solid var(--line); padding-top: 28px; }
+.codex-model-usage h2, .codex-model-usage p { margin: 0; }
+.codex-model-usage select { min-width: 0; }
+.codex-usage-values { margin: 0; display: grid; gap: 14px; }
+.codex-usage-values > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 7px; }
+.codex-usage-values dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.codex-usage-table { overflow-x: auto; }
+.codex-usage-table table { width: 100%; border-collapse: collapse; }
+.codex-usage-table th, .codex-usage-table td { padding: 13px 7px; text-align: start; border-bottom: 1px solid var(--line); }
+.codex-usage-table th { overflow-wrap: anywhere; }
+.codex-model-usage :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .token-panel code { overflow-wrap: anywhere; padding: 16px; border-radius: 10px; background: #edf0e7; }
 
 .app-shell { min-height: 100vh; }

@@ -105,19 +105,29 @@ export class CodexAppServer {
     return () => this.listeners.delete(listener);
   }
 
-  async waitFor(method: string, predicate: (params: Record<string, unknown>) => boolean, timeoutMs = 900_000): Promise<Record<string, unknown>> {
+  async waitFor(method: string, predicate: (params: Record<string, unknown>) => boolean, timeoutMs = 900_000, signal?: AbortSignal): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const abort = () => {
+        cleanup();
+        reject(new Error(`Cancelled waiting for ${method}`));
+      };
+      const cleanup = () => {
+        clearTimeout(timer);
         unsubscribe();
+        signal?.removeEventListener("abort", abort);
+      };
+      const timer = setTimeout(() => {
+        cleanup();
         reject(new Error(`Timed out waiting for ${method}`));
       }, timeoutMs);
       const unsubscribe = this.onNotification((message) => {
         if (message.method === method && message.params && predicate(message.params)) {
-          clearTimeout(timer);
-          unsubscribe();
+          cleanup();
           resolve(message.params);
         }
       });
+      if (signal?.aborted) abort();
+      else signal?.addEventListener("abort", abort, { once: true });
     });
   }
 
