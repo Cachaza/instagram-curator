@@ -46,9 +46,13 @@ export async function runCodexAnalysis(publicationId: string, input: Array<Recor
   } finally {
     controller.abort();
     stop();
-    await usageWrites;
-    await finishCodexUsage(threadId, succeeded ? "completed" : "failed");
-    // The selected account may not support estimates; no inference is requested.
-    await recordCodexCost(threadId, server);
+    try {
+      await usageWrites;
+    } finally {
+      // A failed token snapshot must not leave a finished turn marked running.
+      await finishCodexUsage(threadId, succeeded ? "completed" : "failed");
+      // The selected account may not support estimates; no inference is requested.
+      await recordCodexCost(threadId, server);
+    }
   }
 }

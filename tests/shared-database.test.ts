@@ -83,3 +83,24 @@ test("concurrent retries cannot reset work already retried or claimed", async ()
     expect(result.status,result.stderr).toBe(0);
   });
 });
+
+
+test("concurrent setup returns one stable share token without replacing it", async () => {
+  await withPostgresDatabase(async (url) => {
+    const result=runPostgresScript(`
+      import assert from 'node:assert/strict';
+      import {pool,migrateAppDatabase} from './src/lib/db.ts';
+      import {createShareToken,verifyShareToken,getSetting} from './src/lib/settings.ts';
+      await migrateAppDatabase();
+      const results=await Promise.all([createShareToken(),createShareToken()]);
+      const returned=results.filter(token=>typeof token==='string');
+      assert.equal(returned.length,1);
+      assert.equal(await verifyShareToken(returned[0]),true);
+      assert.equal(await getSetting('api.share_token',null),returned[0]);
+      assert.equal(await createShareToken(),undefined);
+      assert.equal(await verifyShareToken(returned[0]),true);
+      await pool.end();
+    `,url);
+    expect(result.status,result.stderr).toBe(0);
+  });
+});
