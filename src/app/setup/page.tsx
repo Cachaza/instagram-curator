@@ -15,7 +15,7 @@ export default async function SetupPage() {
         <SetupForm locale={locale} />
         <div className="setup-links">
           <a href="/setup/instagram">{t.setup.configureInstagram}</a>
-          <a href="/setup/codex">Configurar Codex</a>
+          <a href="/setup/codex">{t.codex.configure}</a>
           <a href="/setup/diagnostics">Comprobar instalación</a>
         </div>
       </section>

@@ -1,17 +1,20 @@
 import { requireAdmin } from "@/lib/session";
 import { CodexSetup } from "./setup-client";
+import { appLocale, dictionary } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
 export default async function CodexSetupPage() {
   await requireAdmin();
+  const locale = appLocale();
+  const t = dictionary(locale);
   return (
     <main className="centered wide">
       <section className="setup-card">
-        <p className="eyebrow">ASISTENTE DE ANÁLISIS</p>
-        <h1>Conecta Codex</h1>
-        <p className="muted">Autoriza esta instalación con tu suscripción de ChatGPT. Curador no accede ni guarda tus credenciales.</p>
-        <CodexSetup />
+        <p className="eyebrow">{t.codex.assistant}</p>
+        <h1>{t.diagnostics.codex}</h1>
+        <p className="muted">{t.codex.intro}</p>
+        <CodexSetup locale={locale} webOnly={process.env.CURATOR_WEB_ONLY === "1"} />
       </section>
     </main>
   );

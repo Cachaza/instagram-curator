@@ -159,6 +159,80 @@ The administrator is guided through the setup screens:
 No Instagram password is required. A cookies file is usually more reliable for
 self-hosting and can be replaced from the settings interface.
 
+### Codex model and usage
+
+Open **Settings → Codex model and usage** (`/setup/codex`) to choose an analysis
+model and a supported reasoning level from the installed Codex catalog. Access
+is confirmed by a successful analysis, rather than by appearing in the catalog.
+Until configured, Curator leaves the model to Codex's default and requests medium
+reasoning. Changes apply to the next analysis and do not start a worker.
+
+Curator records token snapshots for new analysis attempts, including failed
+attempts when Codex reports usage. Cached input and reasoning output are subsets
+of input and output, not additional tokens. Duplicate snapshots are not added.
+Historical analyses are not assigned invented measurements; missing values stay
+unavailable. Usage records survive deletion of their publication.
+
+The same page shows account-wide quota percentages and reset times, which may
+include other Codex clients. Optional per-thread credit and USD estimates are
+stored only when the installed Codex service returns them. They are estimates,
+not an API invoice or a confirmed additional subscription charge. Unsupported
+usage endpoints do not prevent analysis, and no inference is run to refresh
+usage or list models.
+
+### Local transcription
+
+The worker also accepts `transcription.provider = "local"` in `app_settings`.
+Configure `transcription.local_command` as an argument array containing the
+local Python executable and transcription script. The worker appends the audio
+path and a fresh output directory; it does not invoke a shell.
+
+The command must write `transcript.raw.json` with a non-empty `text` field and
+exit successfully only after validating that generation completed. David's
+existing `transcripciones/transcribe-local.py` provides this contract with
+offline Voxtral on Apple Silicon. Its Python environment and model weights must
+already be installed on the worker's host.
+
+Each attempt retains its raw response and metadata beside the media. A failed
+local transcription is recorded as a pipeline failure and never falls back to
+the OpenAI API. Already completed transcriptions are preserved when switching
+providers. Local executable and model paths must be reconfigured when moving
+the worker to another machine.
+
+### Hosting the web interface separately
+
+Use `bun run start:web` to run database migrations and the production web
+interface without starting the background worker. In Dokploy, build the
+Dockerfile and override the command with `bun` and arguments `run start:web`.
+Mount a persistent named volume at `/app/data`, set `CURATOR_BASE_URL` to the
+address you will open, and include alternative addresses in
+`CURATOR_TRUSTED_ORIGINS`.
+
+`start:web` sets `CURATOR_WEB_ONLY=1`. Diagnostics and the Codex connection
+screen distinguish a connected account from an active processing worker;
+web-only installations do not require an OpenAI transcription key. In worker
+mode, transcription diagnostics check the selected provider instead.
+
+For a reverse proxy such as Dokploy's Traefik, route the domain to the internal
+container port 3000. No host port needs to be published. When an existing
+Cloudflare Tunnel terminates HTTPS and forwards to Traefik on port 80, keep the
+application origin configured as the public HTTPS domain.
+
+Library cards and publication pages check that stored media paths resolve to
+existing files. Missing files show a placeholder and the original Instagram
+link; they do not prevent access to captions, transcripts, or analyses.
+
+When transferring an existing library, stop writes, create a consistent SQLite
+backup, and copy the database, media, and `auth-secret` into an empty destination
+volume. Verify the archive hash and database integrity before starting the web
+service. Keep the original backup. Do not copy API keys, Instagram cookies, or
+Mac executable paths into a Linux installation that only serves the library.
+
+Apple Silicon transcription models remain on the Mac. A copied library does
+not synchronize automatically: imports queued through a web-only installation
+wait for a worker on that database. Do not run independent workers against
+separate database copies and assume their changes will be merged.
+
 ## Import API
 
 The browser interface is available at `/import`. External tools, shortcuts, or
