@@ -10,7 +10,7 @@ FROM base AS build
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
-RUN bun run build
+RUN bun run build && rm -rf /app/data
 
 FROM base AS runtime
 ENV NODE_ENV=production
