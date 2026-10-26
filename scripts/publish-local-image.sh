@@ -4,11 +4,14 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 revision="$(git -C "$project_dir" rev-parse --verify "${1:-HEAD}^{commit}")"
 # A public image may contain no private library data or personal visual captures.
-private_paths="$(git -C "$project_dir" ls-tree -r --name-only "$revision" | awk '
-  /^data\// || /^docs\/(screenshots|design)\// ||
-  /^\.env($|\.)/ && $0 != ".env.example" ||
-  /(^|\/)(curator\.sqlite|auth-secret|instagram-session|cookies\.txt)$/ { print }
-')"
+private_paths=""
+while IFS= read -r -d '' path; do
+  case "$path" in
+    data/*|docs/screenshots/*|docs/design/*|.env|.env.*|*/curator.sqlite|*/auth-secret|*/instagram-session|*/cookies.txt|curator.sqlite|auth-secret|instagram-session|cookies.txt)
+      [[ "$path" == ".env.example" ]] || private_paths+="$path"$'\n'
+      ;;
+  esac
+done < <(git -C "$project_dir" ls-tree -rz --name-only "$revision")
 if [ -n "$private_paths" ]; then
   echo "Refusing public image publication: tracked private-data paths found:" >&2
   echo "$private_paths" >&2
