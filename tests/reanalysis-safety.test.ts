@@ -58,7 +58,7 @@ test("changed location evidence requires reconfirmation while preserving the pre
       import assert from 'node:assert/strict';
       import {db,pool,authPool,migrateAppDatabase,transaction} from './src/lib/db.ts';
       import {getContent} from './src/lib/content.ts';
-      import {listRestaurantPlaces,listRestaurantLocationsNeedingConfirmation,reconfirmChangedRestaurantLocations,saveRestaurantLocation} from './src/lib/restaurant-locations.ts';
+      import {archiveRestaurantLocation,listRestaurantPlaces,listRestaurantLocationsNeedingConfirmation,reconfirmChangedRestaurantLocations,saveRestaurantLocation} from './src/lib/restaurant-locations.ts';
       await migrateAppDatabase();
       await db.execute("INSERT INTO publications(id,source_url,processing_status) VALUES ('venue','https://www.instagram.com/reel/venue/','analyzed')");
       const entities=city=>JSON.stringify({restaurant_name:'Example',address_as_stated:'Calle Test',city});
@@ -84,6 +84,19 @@ test("changed location evidence requires reconfirmation while preserving the pre
       await db.execute("INSERT INTO restaurant_geocodes(cache_key,candidates_json) VALUES ('synthetic-cache',$1)",[JSON.stringify([newPin])]);
       await saveRestaurantLocation({publicationId:'venue',placeKey:key,cacheKey:'synthetic-cache',candidateId:newPin.id},'manual-user');
       assert.equal((await listRestaurantLocationsNeedingConfirmation()).length,0);
+      assert.equal((await listRestaurantPlaces([await getContent('venue')]))[0].location.label,newPin.label);
+      const beforeRename=await getContent('venue');
+      await db.execute("UPDATE analyses SET entities_json=$1 WHERE publication_id='venue'",[JSON.stringify({restaurant_name:'New Example',address_as_stated:'Calle Test',city:'Sevilla'})]);
+      await transaction(async tx=>{await tx.one("SELECT id FROM publications WHERE id='venue' FOR UPDATE");await reconfirmChangedRestaurantLocations(beforeRename,await getContent('venue',tx),tx)});
+      const replacementKey=JSON.stringify(['New Example','Calle Test']);
+      await saveRestaurantLocation({publicationId:'venue',placeKey:replacementKey,cacheKey:'synthetic-cache',candidateId:newPin.id},'manual-user');
+      assert.equal((await listRestaurantLocationsNeedingConfirmation()).length,1);
+      await assert.rejects(archiveRestaurantLocation('venue',replacementKey,'manual-user'),/location_not_pending_confirmation/);
+      await archiveRestaurantLocation('venue',key,'manual-user');
+      await archiveRestaurantLocation('venue',key,'manual-user');
+      assert.equal((await listRestaurantLocationsNeedingConfirmation()).length,0);
+      const archived=JSON.parse((await db.one("SELECT location_json FROM restaurant_locations WHERE publication_id='venue' AND place_key=$1",[key])).location_json);
+      assert.equal(archived.archived,true);assert.equal(archived.label,newPin.label);assert.equal(archived.archivedBy,'manual-user');
       assert.equal((await listRestaurantPlaces([await getContent('venue')]))[0].location.label,newPin.label);
       await pool.end();await authPool.end();
     `, url);

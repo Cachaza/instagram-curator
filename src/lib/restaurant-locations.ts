@@ -6,7 +6,7 @@ import { restaurantPlaceQuery, restaurantPlaces, type RestaurantPlace } from "./
 import { z } from "zod";
 
 // Review state belongs to the saved pin, rather than the provider candidate.
-const savedLocationSchema = candidateSchema.extend({ needsReconfirmation: z.boolean().optional() });
+const savedLocationSchema = candidateSchema.extend({ needsReconfirmation: z.boolean().optional(), archived: z.boolean().optional(), archivedBy: z.string().optional(), archivedAt: z.string().optional() });
 
 export async function listRestaurantPlaces(items: ContentItem[]): Promise<RestaurantPlace[]> {
   const places = items.flatMap(restaurantPlaces);
@@ -14,7 +14,7 @@ export async function listRestaurantPlaces(items: ContentItem[]): Promise<Restau
   const rows = await db.all("SELECT publication_id,place_key,location_json FROM restaurant_locations WHERE publication_id=ANY($1::text[])", [[...new Set(places.map((place) => place.publicationId))]]);
   const locations = new Map(rows.map((row) => {
     const saved = savedLocationSchema.parse(JSON.parse(row.location_json));
-    return [JSON.stringify([row.publication_id, row.place_key]), saved.needsReconfirmation ? null : candidateSchema.parse(saved)] as const;
+    return [JSON.stringify([row.publication_id, row.place_key]), saved.needsReconfirmation || saved.archived ? null : candidateSchema.parse(saved)] as const;
   }));
   return places.map((place) => ({ ...place, location: locations.get(JSON.stringify([place.publicationId, place.key])) ?? null }));
 }
@@ -38,9 +38,23 @@ export async function listRestaurantLocationsNeedingConfirmation() {
     const item = await getContent(row.publication_id);
     if (!item || item.reviewStatus === "discarded") continue;
     const saved = savedLocationSchema.parse(JSON.parse(row.location_json));
+    if (saved.archived) continue;
     if (saved.needsReconfirmation || !restaurantPlaces(item).some((place) => place.key === row.place_key)) changes.push({ publicationId: item.id, placeKey: row.place_key, location: candidateSchema.parse(saved) });
   }
   return changes;
+}
+
+export async function archiveRestaurantLocation(publicationId: string, placeKey: string, userId: string) {
+  await transaction(async (tx) => {
+    await tx.one("SELECT id FROM publications WHERE id=$1 FOR UPDATE", [publicationId]);
+    const row = await tx.one("SELECT location_json FROM restaurant_locations WHERE publication_id=$1 AND place_key=$2", [publicationId, placeKey]);
+    if (!row) throw new Error("location_candidate_not_found");
+    const saved = savedLocationSchema.parse(JSON.parse(row.location_json));
+    if (saved.archived) return;
+    const item = await getContent(publicationId, tx);
+    if (!saved.needsReconfirmation && item && restaurantPlaces(item).some((place) => place.key === placeKey)) throw new Error("location_not_pending_confirmation");
+    await tx.execute("UPDATE restaurant_locations SET location_json=$1 WHERE publication_id=$2 AND place_key=$3", [JSON.stringify({ ...saved, archived: true, archivedBy: userId, archivedAt: new Date().toISOString() }), publicationId, placeKey]);
+  });
 }
 
 export async function requireRestaurantPlace(publicationId: string, key: string, database: Database = db) {
