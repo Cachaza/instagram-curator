@@ -98,14 +98,17 @@ test("Codex analysis uses selected settings, records failed attempts, and releas
         assert.equal(calls.find(c=>c[0]==='turn/start')[1].effort,preferences.effort);
         const row=await db.one('SELECT * FROM codex_usage WHERE thread_id=$1',[threadId]);
         assert.equal(row.model,'actually-resolved');
-        assert.equal(row.status,failure?'failed':'completed');
-        assert.equal(row.total_tokens,failure==='start'?null:10);
+        assert.equal(row.status,failure==='start'||failure==='completion'?'failed':'completed');
+        assert.ok(row.completed_at);
+        assert.equal(row.total_tokens,failure==='start'||failure==='tokens'?null:10);
         assert.equal(row.estimated_usd_micros,null);
       }
       await exercise({model:null,effort:'medium'},null);
       await exercise({model:'selected-model',effort:'low'},null);
       await exercise({model:'selected-model',effort:'low'},'start');
       await exercise({model:null,effort:'medium'},'completion');
+      await db.execute("CREATE FUNCTION reject_token_snapshot() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic usage-write failure'; END $$; CREATE TRIGGER reject_token_snapshot BEFORE UPDATE OF total_tokens ON codex_usage FOR EACH ROW EXECUTE FUNCTION reject_token_snapshot();");
+      await exercise({model:null,effort:'medium'},'tokens');
       await pool.end();
     `, databaseUrl);
     expect(result.status, result.stderr).toBe(0);

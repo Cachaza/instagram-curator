@@ -32,10 +32,10 @@ export async function isSetupComplete(): Promise<boolean> {
   return getSetting("setup.complete", false);
 }
 
-export async function createShareToken(): Promise<string> {
+export async function createShareToken(): Promise<string | undefined> {
   const token = `curator_${randomBytes(32).toString("base64url")}`;
-  await setSetting("api.share_token", token, true);
-  return token;
+  const inserted = await db.one("INSERT INTO app_settings(key,value_json,is_secret) VALUES ('api.share_token',$1,1) ON CONFLICT(key) DO NOTHING RETURNING key",[JSON.stringify(token)]);
+  return inserted ? token : undefined;
 }
 
 export async function verifyShareToken(candidate: string): Promise<boolean> {
