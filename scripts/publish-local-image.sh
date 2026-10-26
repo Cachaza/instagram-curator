@@ -3,6 +3,18 @@ set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 revision="$(git -C "$project_dir" rev-parse --verify "${1:-HEAD}^{commit}")"
+# A public image may contain no private library data or personal visual captures.
+private_paths="$(git -C "$project_dir" ls-tree -r --name-only "$revision" | awk '
+  /^data\// || /^docs\/(screenshots|design)\// ||
+  /^\.env($|\.)/ && $0 != ".env.example" ||
+  /(^|\/)(curator\.sqlite|auth-secret|instagram-session|cookies\.txt)$/ { print }
+')"
+if [ -n "$private_paths" ]; then
+  echo "Refusing public image publication: tracked private-data paths found:" >&2
+  echo "$private_paths" >&2
+  echo "Move these files into private storage and remove them from the committed revision before publishing." >&2
+  exit 1
+fi
 image="${CURATOR_IMAGE:-ghcr.io/cachaza/instagram-curator}"
 # The production Dokploy host is AMD64; Docker Desktop on the ARM Mac emulates it.
 platform="${CURATOR_IMAGE_PLATFORM:-linux/amd64}"
