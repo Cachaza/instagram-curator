@@ -4,7 +4,7 @@ Your saved Instagram feed, turned into a private and searchable personal
 library.
 
 Curator imports reels, posts, and carousels; downloads their media; transcribes
-spoken audio with Whisper; and uses your own Codex subscription to classify and
+spoken audio locally or through Whisper; and uses your own Codex subscription to classify and
 organize everything. It is designed to run at home, stay accessible through
 Tailscale, and keep its database and credentials under your control.
 
@@ -19,14 +19,14 @@ Tailscale, and keep its database and credentials under your control.
 - Imports Instagram reels, posts, and multi-image carousels from a URL.
 - Downloads media with `yt-dlp` and `gallery-dl`.
 - Extracts audio and representative frames with FFmpeg.
-- Transcribes audio through the OpenAI API using your own API key.
+- Transcribes audio with a configured local command or an OpenAI API key.
 - Analyzes publications through Codex using your own ChatGPT subscription.
 - Creates titles, summaries, categories, entities, and structured facets.
 - Filters restaurants by cuisine and budget, recipes by style and nutrition
   goal, and fitness content by goal and muscle group.
 - Provides a review queue, processing pipeline, retries, and analysis history.
 - Supports an administrator and locally-created household accounts.
-- Stores application state in SQLite and media on the local filesystem.
+- Stores shared application state in PostgreSQL and media on the local filesystem.
 - Includes tested backup, restore, legacy migration, Docker, and systemd flows.
 
 ## How the pipeline works
@@ -34,7 +34,7 @@ Tailscale, and keep its database and credentials under your control.
 ```text
 Instagram URL
     ↓
-durable SQLite queue
+durable PostgreSQL queue
     ↓
 yt-dlp / gallery-dl
     ↓
@@ -47,12 +47,12 @@ Codex structured analysis
 searchable library + review queue
 ```
 
-Failures are persisted in SQLite and can be retried from the interface. Existing
+Failures are persisted in PostgreSQL and can be retried from the interface. Existing
 URLs are normalized and deduplicated before entering the queue.
 
 ## Quick start with Docker
 
-You need Docker and Docker Compose. Clone the repository, then run:
+You need Docker, Docker Compose and a private PostgreSQL database. Clone the repository, then run:
 
 ```bash
 cp .env.example .env
@@ -63,6 +63,7 @@ Set the public address from which you will open Curator:
 ```dotenv
 CURATOR_BASE_URL=http://your-host:3000
 CURATOR_TRUSTED_ORIGINS=http://your-host:3000
+DATABASE_URL=postgresql://curator:your-private-password@your-database:5432/curator
 ```
 
 Start the application:
@@ -79,7 +80,7 @@ docker run -d \
   --name curator \
   --restart unless-stopped \
   -p 3000:3000 \
-  -e CURATOR_BASE_URL=http://your-host:3000 \
+  --env-file /private/curator.env \
   -e CURATOR_TRUSTED_ORIGINS=http://your-host:3000 \
   -v curator-data:/app/data \
   ghcr.io/cachaza/instagram-curator:latest
@@ -125,14 +126,15 @@ database automatically, and the first registered account becomes the
 administrator. Public registration closes immediately after that first
 account.
 
-The `curator-data` volume contains SQLite databases, downloaded media, uploaded
-Instagram cookies, backups, API keys, and the isolated Codex login. Treat the
-entire volume as private.
+PostgreSQL stores the private library, accounts, settings and usage records.
+The `curator-data` volume contains downloaded media, uploaded Instagram cookies,
+backups, the auth signing secret and the isolated Codex login. Both stores are private.
 
 ## Native installation
 
 Requirements:
 
+- A private PostgreSQL database (the deployment is verified with PostgreSQL 18)
 - Bun 1.3+
 - Node.js 22+
 - FFmpeg and `ffprobe`
@@ -141,13 +143,16 @@ Requirements:
 - `gallery-dl`
 - Codex CLI
 
-Install dependencies and prepare the databases:
+Set DATABASE_URL in your private .env.local, then install dependencies and migrate:
 
 ```bash
 bun install
 bun run db:migrate
-bun run auth:migrate
 ```
+
+For integration tests, configure `CURATOR_TEST_DATABASE_URL` with a loopback
+PostgreSQL server and a disposable admin database named `curator_test`. Tests
+create and remove isolated databases; they never fall back to DATABASE_URL.
 
 For development:
 
@@ -176,7 +181,7 @@ The administrator is guided through the setup screens:
    Firefox profile.
 3. Authorize Codex through the device-code flow. The Codex state is isolated
    under Curator's `data` directory.
-4. Run diagnostics to verify SQLite, storage, FFmpeg, downloaders, Instagram,
+4. Run diagnostics to verify PostgreSQL, storage, FFmpeg, downloaders, Instagram,
    OpenAI, and Codex.
 
 No Instagram password is required. A cookies file is usually more reliable for
@@ -245,16 +250,39 @@ Library cards and publication pages check that stored media paths resolve to
 existing files. Missing files show a placeholder and the original Instagram
 link; they do not prevent access to captions, transcripts, or analyses.
 
-When transferring an existing library, stop writes, create a consistent SQLite
-backup, and copy the database, media, and `auth-secret` into an empty destination
-volume. Verify the archive hash and database integrity before starting the web
-service. Keep the original backup. Do not copy API keys, Instagram cookies, or
-Mac executable paths into a Linux installation that only serves the library.
+### Shared Mac/server database and SQLite migration
 
-Apple Silicon transcription models remain on the Mac. A copied library does
-not synchronize automatically: imports queued through a web-only installation
-wait for a worker on that database. Do not run independent workers against
-separate database copies and assume their changes will be merged.
+Stop all writers before importing the current SQLite library into a new empty
+PostgreSQL database:
+
+```bash
+bun run migrate:postgres -- --sqlite /private/library/curator.sqlite --confirm
+```
+
+The importer first creates a consistent SQLite backup and retains private auth
+files. It copies accounts, sessions, password hashes, publications, transcripts,
+analyses, history, reviews, settings, events and measured usage. It verifies a
+checksum of every copied value and rebuilds search. A failure rolls back the
+import; a populated PostgreSQL target is refused. No inference is performed.
+Keep the original SQLite database and the previous image for rollback. After
+PostgreSQL accepts new writes, reverting the image alone would lose those writes;
+reconcile them or restore the appropriate database backup first.
+
+Configure the Mac and Dokploy with DATABASE_URL values that reach the same private
+database. Dokploy uses its internal Docker network. For a Mac behind an SSH
+bastion, set a loopback DATABASE_URL plus CURATOR_DATABASE_SSH_TARGET,
+CURATOR_DATABASE_REMOTE_HOST and CURATOR_DATABASE_REMOTE_PORT, then keep
+`bun run db:tunnel` running while using the Mac app or worker. The SSH tunnel
+binds only to loopback. Restrict database network access and use SCRAM credentials;
+use verified PostgreSQL TLS when connecting without an encrypted private tunnel.
+
+Media files and Codex login files remain on each machine's private filesystem.
+A shared database does not transfer videos or thumbnails: copy/synchronize those
+files separately, retaining their relative `media/...` paths. Preserve the web
+server's `auth-secret` when migrating so its signed sessions remain valid.
+Apple Silicon transcription models remain on the Mac. Start only one processing
+host: the worker holds a shared database lock before recovering interrupted jobs.
+The server can remain web-only while the Mac uses the local transcription model.
 
 ## Import API
 
@@ -286,9 +314,12 @@ Stop the service before restoring:
 bun run restore -- /path/to/backup --confirm
 ```
 
-Restore validates SQLite integrity and preserves the previous database and media
-directory with a timestamped recovery suffix. Backups contain private media and
-credentials; store them accordingly.
+Backups use a consistent PostgreSQL snapshot in private `library.json` plus an
+archive of media and runtime credentials. Restore checks the database checksum
+and requires a new empty PostgreSQL target. It preserves previous private files
+with a timestamped recovery suffix. Legacy SQLite backups use the migration
+command above. Stop writers during backup if files are being processed, so the
+media archive matches the database snapshot. Backups contain private credentials.
 
 ## Migrating from the original prototype
 
@@ -304,8 +335,8 @@ are on the same filesystem.
 
 ## Data and security
 
-- SQLite is the source of truth.
-- Secrets are stored locally in SQLite or private runtime files.
+- PostgreSQL is the shared source of truth.
+- Secrets are stored in the private database or private runtime files.
 - `data/`, cookies, databases, backups, and downloaded media are ignored by Git.
 - Codex runs with read-only filesystem access and approvals disabled for
   automated analysis.

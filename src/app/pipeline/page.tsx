@@ -21,13 +21,10 @@ const statusMeta: Record<string, { label: string; icon: typeof Clock3 }> = {
 
 export default async function PipelinePage() {
   await requireSession();
-  const t = dictionary();
-  const statuses = db.prepare("SELECT processing_status status,COUNT(*) count FROM publications GROUP BY processing_status ORDER BY count DESC")
-    .all() as Array<{ status: string; count: number }>;
-  const failures = db.prepare("SELECT id,source_url,current_stage,last_error,attempts,updated_at FROM publications WHERE processing_status='failed' ORDER BY updated_at DESC LIMIT 20")
-    .all() as Array<Record<string, string | number>>;
-  const events = db.prepare("SELECT e.*,p.source_url FROM pipeline_events e JOIN publications p ON p.id=e.publication_id ORDER BY e.id DESC LIMIT 25")
-    .all() as Array<Record<string, string>>;
+  const t = await dictionary();
+  const statuses = await db.all<{ status: string; count: number }>("SELECT processing_status AS status,COUNT(*)::int AS count FROM publications GROUP BY processing_status ORDER BY count DESC");
+  const failures = await db.all<Record<string, string | number>>("SELECT id,source_url,current_stage,last_error,attempts,updated_at FROM publications WHERE processing_status='failed' ORDER BY updated_at DESC LIMIT 20");
+  const events = await db.all<Record<string, string>>("SELECT e.*,p.source_url FROM pipeline_events e JOIN publications p ON p.id=e.publication_id ORDER BY e.id DESC LIMIT 25");
   return (
     <div className="page-container">
       <section className="page-hero"><p className="section-kicker">ESTADO OPERATIVO</p><h1>Pipeline<span>.</span></h1><p>Descargas, transcripciones, análisis y errores persistidos en tiempo real.</p></section>

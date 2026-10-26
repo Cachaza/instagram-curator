@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { admin } from "better-auth/plugins";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { authSecret } from "./runtime-secret";
 
 const baseURL = process.env.CURATOR_BASE_URL ?? "http://localhost:3000";
@@ -15,7 +15,7 @@ export const auth = betterAuth({
   baseURL,
   trustedOrigins: [baseURL, "http://127.0.0.1:3000", ...configuredOrigins],
   secret: authSecret(),
-  database: db,
+  database: pool,
   emailAndPassword: {
     enabled: true,
     // Four characters keeps local development accounts simple. The setup
@@ -26,7 +26,7 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user, context) => {
-          const count = (db.prepare('SELECT COUNT(*) AS count FROM "user"').get() as { count: number }).count;
+          const count = (await db.one<{ count: number }>('SELECT COUNT(*)::int AS count FROM "user"'))!.count;
           const adminCreation = context?.path === "/admin/create-user";
           if (count > 0 && !adminCreation) {
             throw new APIError("FORBIDDEN", { message: "El registro público está cerrado" });

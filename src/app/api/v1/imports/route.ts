@@ -15,7 +15,7 @@ async function requester(request: Request) {
 
   const authorization = request.headers.get("authorization") ?? "";
   const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  return { allowed: verifyShareToken(token), userId: null };
+  return { allowed: await verifyShareToken(token), userId: null };
 }
 
 export async function POST(request: Request) {
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
 
   try {
-    const result = enqueueInstagramUrl(parsed.data.url, actor.userId);
+    const result = await enqueueInstagramUrl(parsed.data.url, actor.userId);
     return NextResponse.json({
       publication_id: result.publicationId,
       status: result.status,

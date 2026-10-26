@@ -7,7 +7,7 @@ import { messages, type Locale } from "@/lib/messages";
 
 type Settings = {
   preferences: CodexPreferences; models: CodexModel[]; defaultModel: string | null;
-  limits: RateBucket[] | null; accountTokens: number | null; usage: ReturnType<typeof curatorUsage>;
+  limits: RateBucket[] | null; accountTokens: number | null; usage: Awaited<ReturnType<typeof curatorUsage>>;
   errors: { models: boolean; config: boolean; limits: boolean; accountTokens: boolean };
 };
 

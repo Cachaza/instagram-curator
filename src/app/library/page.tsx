@@ -11,7 +11,7 @@ const FACET_QUERY_KEYS = ["cuisine", "budget", "recipeGoal", "recipeStyle", "fit
 export default async function LibraryPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireSession();
   const query = await searchParams;
-  const all = listContent({ category: query.category, query: query.q });
+  const all = await listContent({ category: query.category, query: query.q });
   const filtered = all.filter((item) => {
     const restaurant = item.facets.restaurant as Record<string, unknown> | undefined;
     const recipe = item.facets.recipe as Record<string, unknown> | undefined;
@@ -35,12 +35,12 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   const pageSize = 60;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visible = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const categoryRows = categories();
+  const categoryRows = await categories();
   const facets = {
     cuisines: new Set<string>(), recipeGoals: new Set<string>(), recipeStyles: new Set<string>(),
     fitnessGoals: new Set<string>(), muscles: new Set<string>(),
   };
-  for (const item of listContent()) {
+  for (const item of await listContent()) {
     const add = (target: Set<string>, value: unknown) => Array.isArray(value) && value.forEach((entry) => typeof entry === "string" && target.add(entry));
     const r = item.facets.restaurant as Record<string, unknown> | undefined;
     const recipe = item.facets.recipe as Record<string, unknown> | undefined;

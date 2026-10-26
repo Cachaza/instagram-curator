@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 
 export default async function CodexSetupPage() {
   await requireAdmin();
-  const locale = appLocale();
-  const t = dictionary(locale);
+  const locale = await appLocale();
+  const t = await dictionary(locale);
   return (
     <main className="centered wide">
       <section className="setup-card">

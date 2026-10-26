@@ -3,11 +3,12 @@ import { messages, type Locale } from "./messages";
 
 export const supportedLocales = ["es", "en"] as const;
 
-export function appLocale(): Locale {
-  const locale = getSetting<string>("ui.locale", "es");
+export async function appLocale(): Promise<Locale> {
+  const locale = await getSetting<string>("ui.locale", "es");
   return supportedLocales.includes(locale as Locale) ? locale as Locale : "es";
 }
 
-export function dictionary(locale = appLocale()) {
-  return messages[locale];
+export async function dictionary(locale?: Locale) {
+  const selectedLocale = locale ?? await appLocale();
+  return messages[selectedLocale];
 }

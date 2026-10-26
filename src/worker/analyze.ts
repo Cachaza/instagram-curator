@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { db } from "@/lib/db";
+import { db, transaction, type Database } from "@/lib/db";
 import { dataDir } from "@/lib/paths";
 import { getSetting } from "@/lib/settings";
 import { codexAccountStatus } from "@/lib/codex/account";
@@ -60,23 +60,22 @@ const outputSchema = {
   },
 };
 
-function addEvent(id: string, stage: string, eventType: string, message?: string): void {
-  db.prepare("INSERT INTO pipeline_events(publication_id,stage,event_type,message) VALUES (?,?,?,?)")
-    .run(id, stage, eventType, message ?? null);
+async function addEvent(id: string, stage: string, eventType: string, message?: string, store: Database = db): Promise<void> {
+  (await store.execute("INSERT INTO pipeline_events(publication_id,stage,event_type,message) VALUES ($1,$2,$3,$4)",[id,stage,eventType,message ?? null]));
 }
 
-function claim(): Publication | null {
-  return db.transaction(() => {
-    const item = db.prepare(`
+async function claim(): Promise<Publication | null> {
+  return transaction(async (tx) => {
+    const item = (await tx.one(`
       SELECT id,source_url,author,caption,transcript_text,contact_sheet_path
       FROM publications WHERE processing_status='ready_for_analysis'
-      ORDER BY updated_at LIMIT 1
-    `).get() as Publication | undefined;
+      ORDER BY updated_at LIMIT 1 FOR UPDATE SKIP LOCKED
+    `,[])) as Publication | undefined;
     if (!item) return null;
-    db.prepare("UPDATE publications SET processing_status='analyzing',current_stage='analyzing',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(item.id);
-    addEvent(item.id, "analyzing", "transition");
+    (await tx.execute("UPDATE publications SET processing_status='analyzing',current_stage='analyzing',updated_at=CURRENT_TIMESTAMP WHERE id=$1",[item.id]));
+    await addEvent(item.id, "analyzing", "transition", undefined, tx);
     return item;
-  })();
+  });
 }
 
 function prompt(item: Publication, locale: string): string {
@@ -106,11 +105,11 @@ ${item.transcript_text ?? "(none)"}`;
 export async function processNextAnalysis(): Promise<boolean> {
   const status = await codexAccountStatus().catch(() => ({ connected: false }));
   if (!status.connected) return false;
-  const item = claim();
+  const item = await claim();
   if (!item) return false;
   try {
     const inputs: Array<Record<string, unknown>> = [
-      { type: "text", text: prompt(item, getSetting("analysis.locale", "es")), text_elements: [] },
+      { type: "text", text: prompt(item, await getSetting("analysis.locale", "es")), text_elements: [] },
     ];
     if (item.contact_sheet_path) {
       inputs.push({ type: "localImage", path: resolve(dataDir, item.contact_sheet_path), detail: "high" });
@@ -123,16 +122,16 @@ export async function processNextAnalysis(): Promise<boolean> {
       entities: JSON.parse(wire.entities_json) as Record<string, unknown>,
       facets: normalizeFacets(wire.category, rawFacets),
     };
-    const locale = getSetting("analysis.locale", "es");
-    db.transaction(() => {
-      db.prepare("INSERT INTO analysis_versions(publication_id,analysis_json,source) VALUES (?,?,?)")
-        .run(item.id, JSON.stringify(analysis), "codex");
-      db.prepare(`
+    const locale = await getSetting("analysis.locale", "es");
+    await transaction(async (tx) => {
+      if (!await tx.one("SELECT id FROM publications WHERE id=$1 FOR UPDATE",[item.id])) throw new Error("Publication was removed during analysis");
+      (await tx.execute("INSERT INTO analysis_versions(publication_id,analysis_json,source) VALUES ($1,$2,$3)",[item.id,JSON.stringify(analysis),"codex"]));
+      (await tx.execute(`
         INSERT INTO analyses(
           publication_id,category,subcategory,title,summary,visual_description,
           why_interesting,next_action,ai_action_status,tags_json,entities_json,
           facets_json,confidence,needs_review,review_reason,codex_notes,prompt_version,output_locale
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
         ON CONFLICT(publication_id) DO UPDATE SET
           category=excluded.category,subcategory=excluded.subcategory,title=excluded.title,
           summary=excluded.summary,visual_description=excluded.visual_description,
@@ -143,28 +142,22 @@ export async function processNextAnalysis(): Promise<boolean> {
           review_reason=excluded.review_reason,codex_notes=excluded.codex_notes,
           prompt_version=excluded.prompt_version,output_locale=excluded.output_locale,
           analyzed_at=CURRENT_TIMESTAMP
-      `).run(
-        item.id, analysis.category, analysis.subcategory, analysis.title, analysis.summary,
-        analysis.visual_description, analysis.why_interesting, analysis.next_action,
-        analysis.action_status, JSON.stringify(analysis.tags), JSON.stringify(analysis.entities),
-        JSON.stringify(analysis.facets), analysis.confidence, analysis.needs_review ? 1 : 0,
-        analysis.review_reason, analysis.codex_notes, "v3", locale,
-      );
-      db.prepare(`
+      `,[item.id,analysis.category,analysis.subcategory,analysis.title,analysis.summary,analysis.visual_description,analysis.why_interesting,analysis.next_action,analysis.action_status,JSON.stringify(analysis.tags),JSON.stringify(analysis.entities),JSON.stringify(analysis.facets),analysis.confidence,analysis.needs_review ? 1 : 0,analysis.review_reason,analysis.codex_notes,"v3",locale]));
+      (await tx.execute(`
         UPDATE publications SET processing_status='analyzed',current_stage='analyzed',
-          action_status=?,review_status='unreviewed',last_error=NULL,updated_at=CURRENT_TIMESTAMP
-        WHERE id=?
-      `).run(analysis.action_status, item.id);
-      addEvent(item.id, "analyzed", "transition", "Codex analysis completed");
-    })();
+          action_status=$1,review_status='unreviewed',last_error=NULL,updated_at=CURRENT_TIMESTAMP
+        WHERE id=$2
+      `,[analysis.action_status,item.id]));
+      await addEvent(item.id, "analyzed", "transition", "Codex analysis completed", tx);
+    });
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    db.prepare(`
+    (await db.execute(`
       UPDATE publications SET processing_status='failed',current_stage='analyzing',
-        attempts=attempts+1,last_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?
-    `).run(message.slice(0, 4_000), item.id);
-    addEvent(item.id, "analyzing", "error", message.slice(0, 4_000));
+        attempts=attempts+1,last_error=$1,updated_at=CURRENT_TIMESTAMP WHERE id=$2
+    `,[message.slice(0, 4_000),item.id]));
+    await addEvent(item.id, "analyzing", "error", message.slice(0, 4_000));
     return true;
   }
 }

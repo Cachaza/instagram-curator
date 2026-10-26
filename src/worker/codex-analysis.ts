@@ -6,7 +6,7 @@ import { dataDir } from "@/lib/paths";
 type AnalysisServer = Pick<typeof codexAppServer, "request" | "onNotification" | "waitFor">;
 
 export async function runCodexAnalysis(publicationId: string, input: Array<Record<string, unknown>>, outputSchema: unknown, server: AnalysisServer = codexAppServer): Promise<string> {
-  const preferences = codexPreferences();
+  const preferences = await codexPreferences();
   const started = await server.request<{ thread: { id: string }; model?: string }>("thread/start", {
     ...(preferences.model ? { model: preferences.model } : {}),
     cwd: dataDir,
@@ -17,12 +17,15 @@ export async function runCodexAnalysis(publicationId: string, input: Array<Recor
     baseInstructions: "You are a careful content curator. Do not run commands, edit files, browse the web, or use external facts. Analyze only the user-provided source material.",
   });
   const threadId = started.thread.id;
-  beginCodexUsage(threadId, publicationId, started.model ?? null, preferences.effort);
+  await beginCodexUsage(threadId, publicationId, started.model ?? null, preferences.effort);
   let finalText = "";
   let succeeded = false;
+  let usageWrites = Promise.resolve();
   const stop = server.onNotification((message) => {
     if (message.params?.threadId !== threadId) return;
-    if (message.method === "thread/tokenUsage/updated") recordCodexTokens(message.params);
+    if (message.method === "thread/tokenUsage/updated") usageWrites = usageWrites.then(() => recordCodexTokens(message.params));
+    // A rejected usage write is awaited and surfaced after notification cleanup.
+    void usageWrites.catch(() => {});
     if (message.method === "item/completed") {
       const item = message.params.item as { type?: string; text?: string } | undefined;
       if (item?.type === "agentMessage") finalText = item.text ?? finalText;
@@ -43,7 +46,8 @@ export async function runCodexAnalysis(publicationId: string, input: Array<Recor
   } finally {
     controller.abort();
     stop();
-    finishCodexUsage(threadId, succeeded ? "completed" : "failed");
+    await usageWrites;
+    await finishCodexUsage(threadId, succeeded ? "completed" : "failed");
     // The selected account may not support estimates; no inference is requested.
     await recordCodexCost(threadId, server);
   }

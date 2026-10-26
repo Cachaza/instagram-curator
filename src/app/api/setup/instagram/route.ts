@@ -22,9 +22,9 @@ async function isAdmin() {
 export async function GET() {
   if (!await isAdmin()) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   return NextResponse.json({
-    username: getSetting("instagram.username", ""),
-    cookiesFromBrowser: getSetting("instagram.cookies_from_browser", ""),
-    instaloaderSessionFile: getSetting("instagram.instaloader_session_file", ""),
+    username: await getSetting("instagram.username", ""),
+    cookiesFromBrowser: await getSetting("instagram.cookies_from_browser", ""),
+    instaloaderSessionFile: await getSetting("instagram.instaloader_session_file", ""),
     profiles: discoverBrowserProfiles(),
   });
 }
@@ -34,9 +34,9 @@ export async function POST(request: Request) {
   const parsed = Schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "invalid_instagram_setup" }, { status: 400 });
 
-  setSetting("instagram.username", parsed.data.username);
-  setSetting("instagram.cookies_from_browser", parsed.data.cookiesFromBrowser);
-  setSetting("instagram.instaloader_session_file", parsed.data.instaloaderSessionFile, true);
+  await setSetting("instagram.username", parsed.data.username);
+  await setSetting("instagram.cookies_from_browser", parsed.data.cookiesFromBrowser);
+  await setSetting("instagram.instaloader_session_file", parsed.data.instaloaderSessionFile, true);
 
   if (parsed.data.action === "validate") {
     if (!parsed.data.testUrl) {

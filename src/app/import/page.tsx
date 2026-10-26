@@ -10,9 +10,9 @@ export const dynamic = "force-dynamic";
 
 export default async function ImportPage() {
   const session = await requireSession();
-  if (!isSetupComplete() && session.user.role === "admin") redirect("/setup");
-  const t = dictionary();
-  const imports = recentImports();
+  if (!await isSetupComplete() && session.user.role === "admin") redirect("/setup");
+  const t = await dictionary();
+  const imports = await recentImports();
 
   return (
     <main className="app-shell">

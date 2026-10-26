@@ -1,25 +1,37 @@
 import { runWorker } from "./pipeline";
 import { processNextAnalysis } from "./analyze";
 import { codexAppServer } from "../lib/codex/app-server";
-import { db } from "../lib/db";
+import { pool, transaction } from "../lib/db";
 
-function recoverInterruptedWork(): void {
-  db.transaction(() => {
-    const interrupted = db.prepare(`
+async function recoverInterruptedWork(): Promise<void> {
+  await transaction(async (tx) => {
+    const interrupted = (await tx.all(`
       SELECT id,processing_status FROM publications
       WHERE processing_status IN ('downloading','extracting_media','transcribing','analyzing')
-    `).all() as Array<{ id: string; processing_status: string }>;
+    `,[])) as Array<{ id: string; processing_status: string }>;
     for (const item of interrupted) {
       const next = item.processing_status === "analyzing" ? "ready_for_analysis" : "pending";
-      db.prepare("UPDATE publications SET processing_status=?,current_stage=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
-        .run(next, next, item.id);
-      db.prepare("INSERT INTO pipeline_events(publication_id,stage,event_type,message) VALUES (?,?,?,?)")
-        .run(item.id, next, "recovered", `Recovered interrupted ${item.processing_status} job`);
+      (await tx.execute("UPDATE publications SET processing_status=$1,current_stage=$2,updated_at=CURRENT_TIMESTAMP WHERE id=$3",[next,next,item.id]));
+      (await tx.execute("INSERT INTO pipeline_events(publication_id,stage,event_type,message) VALUES ($1,$2,$3,$4)",[item.id,next,"recovered",`Recovered interrupted ${item.processing_status} job`]));
     }
-  })();
+  });
 }
 
-recoverInterruptedWork();
+// One processing host owns local media and the local transcription model.
+// Hold a session lock before recovering jobs; another worker must not reset
+// work still running on the Mac.
+const ownership = await pool.connect();
+const lock = await ownership.query("SELECT pg_try_advisory_lock(hashtextextended('curator-worker',0)) AS acquired");
+if (!lock.rows[0].acquired) {
+  ownership.release();
+  await pool.end();
+  throw new Error("Worker capacity is 1 active processing host; requested a second worker. Stop the existing worker before starting another.");
+}
+ownership.on("error", () => {
+  console.error("Worker database ownership connection was lost. Restart the worker after restoring PostgreSQL connectivity; interrupted stages will be recovered.");
+  process.exit(1);
+});
+await recoverInterruptedWork();
 
 const args = process.argv.slice(2);
 const limitIndex = args.indexOf("--limit");
@@ -38,4 +50,7 @@ if (args.includes("--watch")) {
   await runWorker(loop, loop ? limit : 1);
   if (!loop) await processNextAnalysis();
   codexAppServer.stop();
+  await ownership.query("SELECT pg_advisory_unlock(hashtextextended('curator-worker',0))");
+  ownership.release();
+  await pool.end();
 }

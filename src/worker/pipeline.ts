@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { db } from "../lib/db";
+import { db, transaction, type Database } from "../lib/db";
 import { dataDir } from "../lib/paths";
 import { getWorkerConfig } from "./config";
 import { runCommand, runCommandCapture } from "./process";
@@ -29,43 +29,42 @@ function portable(path: string): string {
   return relative(dataDir, resolve(path));
 }
 
-function event(id: string, stage: string, type: string, message?: string): void {
-  db.prepare(`
+async function event(id: string, stage: string, type: string, message?: string, store: Database = db): Promise<void> {
+  (await store.execute(`
     INSERT INTO pipeline_events(publication_id,stage,event_type,message)
-    VALUES (?,?,?,?)
-  `).run(id, stage, type, message ?? null);
+    VALUES ($1,$2,$3,$4)
+  `,[id,stage,type,message ?? null]));
 }
 
-function transition(id: string, status: string, fields: Record<string, string | number | null> = {}): void {
+async function transition(id: string, status: string, fields: Record<string, string | number | null> = {}, store: Database = db): Promise<void> {
   const allowed = new Set([
     "video_path", "audio_path", "transcript_path", "transcript_text",
     "contact_sheet_path", "frames_json", "last_error", "attempts",
   ]);
   const entries = Object.entries(fields).filter(([key]) => allowed.has(key));
-  const assignments = ["processing_status=?", "current_stage=?", ...entries.map(([key]) => `${key}=?`)];
-  db.prepare(`UPDATE publications SET ${assignments.join(",")},updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-    .run(status, status, ...entries.map(([, value]) => value), id);
-  event(id, status, "transition");
+  const assignments = ["processing_status=$1", "current_stage=$2", ...entries.map(([key], index) => `${key}=$${index + 3}`)];
+  await store.execute(`UPDATE publications SET ${assignments.join(",")},updated_at=CURRENT_TIMESTAMP WHERE id=$${entries.length + 3}`,
+    [status, status, ...entries.map(([, value]) => value), id]);
+  await event(id, status, "transition", undefined, store);
 }
 
-function claimNext(): Publication | null {
-  const transaction = db.transaction(() => {
-    const publication = db.prepare(`
+async function claimNext(): Promise<Publication | null> {
+  return transaction(async (tx) => {
+    const publication = await tx.one<Publication>(`
       SELECT id,source_url,media_type,instagram_json FROM publications
       WHERE processing_status='pending'
-      ORDER BY created_at LIMIT 1
-    `).get() as Publication | undefined;
+      ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED
+    `);
     if (!publication) return null;
-    transition(publication.id, "downloading");
+    await transition(publication.id, "downloading", {}, tx);
     return publication;
   });
-  return transaction();
 }
 
 export async function processNextPublication(): Promise<boolean> {
-  const publication = claimNext();
+  const publication = await claimNext();
   if (!publication) return false;
-  const workerConfig = getWorkerConfig();
+  const workerConfig = await getWorkerConfig();
 
   const directory = join(workerConfig.mediaRoot, publication.id);
   mkdirSync(directory, { recursive: true });
@@ -80,16 +79,11 @@ export async function processNextPublication(): Promise<boolean> {
       metadata = JSON.parse(await runCommandCapture(inspect)) as DownloadMetadata;
       const entries = metadata.entries?.filter(Boolean) ?? [];
       const mediaType = entries.length > 1 ? "carousel" : metadata.vcodec === "none" || metadata.ext === "jpg" ? "image" : "video";
-      db.prepare(`
-        UPDATE publications SET instagram_json=?,media_type=?,author=COALESCE(author,?),
-          caption=COALESCE(caption,?),published_at=COALESCE(published_at,?),updated_at=CURRENT_TIMESTAMP
-        WHERE id=?
-      `).run(
-        JSON.stringify(metadata), mediaType, metadata.uploader ?? null,
-        metadata.description ?? metadata.title ?? null,
-        metadata.timestamp ? new Date(metadata.timestamp * 1_000).toISOString() : null,
-        publication.id,
-      );
+      (await db.execute(`
+        UPDATE publications SET instagram_json=$1,media_type=$2,author=COALESCE(author,$3),
+          caption=COALESCE(caption,$4),published_at=COALESCE(published_at,$5),updated_at=CURRENT_TIMESTAMP
+        WHERE id=$6
+      `,[JSON.stringify(metadata),mediaType,metadata.uploader ?? null,metadata.description ?? metadata.title ?? null,metadata.timestamp ? new Date(metadata.timestamp * 1_000).toISOString() : null,publication.id]));
       publication.media_type = mediaType;
     }
 
@@ -142,7 +136,7 @@ export async function processNextPublication(): Promise<boolean> {
         "-vf", normalizedFrames.length === 1 ? "scale=1080:-2" : "scale=720:-2,tile=3x3:padding=8:margin=8",
         "-frames:v", "1", contactSheetPath,
       ]);
-      transition(publication.id, "ready_for_analysis", {
+      await transition(publication.id, "ready_for_analysis", {
         contact_sheet_path: portable(contactSheetPath),
         frames_json: JSON.stringify(normalizedFrames.map(portable)),
         transcript_text: "",
@@ -174,7 +168,7 @@ export async function processNextPublication(): Promise<boolean> {
       videoPath = join(directory, actual);
     }
 
-    transition(publication.id, "extracting_media", { video_path: portable(videoPath) });
+    await transition(publication.id, "extracting_media", { video_path: portable(videoPath) });
     const audioPath = join(directory, "audio.wav");
     const audioStream = (await runCommandCapture([
       workerConfig.ffprobeBin, "-v", "error", "-select_streams", "a:0",
@@ -206,7 +200,7 @@ export async function processNextPublication(): Promise<boolean> {
       ]);
     }
 
-    transition(publication.id, "transcribing", {
+    await transition(publication.id, "transcribing", {
       audio_path: audioStream ? portable(audioPath) : null,
       contact_sheet_path: existsSync(contactSheetPath) ? portable(contactSheetPath) : null,
       frames_json: JSON.stringify(frames.map((file) => portable(join(framesDirectory, file)))),
@@ -214,21 +208,20 @@ export async function processNextPublication(): Promise<boolean> {
     const transcriptPath = join(directory, "transcript.txt");
     const transcriptText = audioStream ? await transcribe(audioPath, transcriptPath) : "";
     if (!audioStream) writeFileSync(transcriptPath, "");
-    transition(publication.id, "ready_for_analysis", {
+    await transition(publication.id, "ready_for_analysis", {
       transcript_path: portable(transcriptPath),
       transcript_text: transcriptText,
       last_error: null,
     });
     return true;
   } catch (error) {
-    const row = db.prepare("SELECT attempts FROM publications WHERE id=?")
-      .get(publication.id) as { attempts: number };
+    const row = (await db.one("SELECT attempts FROM publications WHERE id=$1",[publication.id])) as { attempts: number };
     const message = error instanceof Error ? error.message : String(error);
-    transition(publication.id, "failed", {
+    await transition(publication.id, "failed", {
       attempts: row.attempts + 1,
       last_error: message.slice(0, 4_000),
     });
-    event(publication.id, "failed", "error", message.slice(0, 4_000));
+    await event(publication.id, "failed", "error", message.slice(0, 4_000));
     return true;
   }
 }

@@ -10,7 +10,7 @@ import {
   statSync,
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { db, migrateAppDatabase } from "../src/lib/db";
+import { db, migrateAppDatabase, transaction, pool } from "../src/lib/db";
 import { dataDir } from "../src/lib/paths";
 import { deriveFacets } from "../src/lib/facets";
 
@@ -33,11 +33,10 @@ const legacyMediaRoot = option(
 const savedImportRoot = resolve(dirname(legacyDatabasePath), "instagram-saved-import");
 const targetMediaRoot = resolve(dataDir, "media");
 const legacy = new Database(legacyDatabasePath, { readonly: true });
-migrateAppDatabase();
+await migrateAppDatabase();
 mkdirSync(targetMediaRoot, { recursive: true, mode: 0o700 });
 
-const admin = db.prepare(`SELECT id FROM "user" WHERE role='admin' ORDER BY createdAt LIMIT 1`)
-  .get() as { id: string } | undefined;
+const admin = await db.one<{id: string}>(`SELECT id FROM "user" WHERE role='admin' ORDER BY "createdAt" LIMIT 1`);
 if (!admin) throw new Error("Create the administrator account before migrating legacy data");
 
 type LegacyPublication = Record<string, any>;
@@ -99,7 +98,7 @@ function mapStatus(status: string): string {
   return statuses[status] ?? "failed";
 }
 
-const migratePublication = db.prepare(`
+const publicationSql = `
   INSERT INTO publications(
     id,source_url,source_type,shortcode,author,caption,instagram_json,media_type,
     processing_status,current_stage,review_status,action_status,
@@ -122,9 +121,9 @@ const migratePublication = db.prepare(`
     published_at=excluded.published_at,saved_order=excluded.saved_order,
     attempts=excluded.attempts,last_error=excluded.last_error,
     updated_at=excluded.updated_at
-`);
+`;
 
-const transaction = db.transaction(() => {
+await transaction(async (tx) => {
   for (const publication of publications) {
     const sourceDir = join(legacyMediaRoot, publication.id);
     const targetDir = join(targetMediaRoot, publication.id);
@@ -137,7 +136,7 @@ const transaction = db.transaction(() => {
     const frames = JSON.parse(publication.frames_json || "[]") as string[];
     const portableFrames = frames.map(portablePath).filter(Boolean);
     const status = mapStatus(publication.processing_status);
-    migratePublication.run({
+    const publicationRow: Record<string, unknown> = {
       ...publication,
       source_url: publication.source_url.endsWith("/") ? publication.source_url : `${publication.source_url}/`,
       processing_status: status,
@@ -151,16 +150,19 @@ const transaction = db.transaction(() => {
       saved_order: savedOrderByShortcode.get(publication.shortcode)
         ?? savedOrderByShortcode.size + publication.legacy_rowid,
       created_by_user_id: admin.id,
-    });
+    };
+    const names: string[] = [];
+    const sql = publicationSql.replace(/@([a-z_]+)/g, (_, name: string) => { names.push(name); return `$${names.length}`; });
+    await tx.execute(sql,names.map((name) => publicationRow[name]));
   }
 
   const analyses = legacy.prepare("SELECT * FROM analyses").all() as Array<Record<string, any>>;
-  const insertAnalysis = db.prepare(`
+  const insertAnalysis = `
     INSERT INTO analyses(
       publication_id,category,subcategory,title,summary,visual_description,why_interesting,
       next_action,ai_action_status,tags_json,entities_json,facets_json,legacy_entities_json,
       confidence,needs_review,review_reason,codex_notes,prompt_version,output_locale,analyzed_at
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
     ON CONFLICT(publication_id) DO UPDATE SET
       category=excluded.category,subcategory=excluded.subcategory,title=excluded.title,
       summary=excluded.summary,visual_description=excluded.visual_description,
@@ -171,11 +173,11 @@ const transaction = db.transaction(() => {
       needs_review=excluded.needs_review,review_reason=excluded.review_reason,
       codex_notes=excluded.codex_notes,prompt_version=excluded.prompt_version,
       output_locale=excluded.output_locale,analyzed_at=excluded.analyzed_at
-  `);
+  `;
   for (const analysis of analyses) {
     const tags = JSON.parse(analysis.tags_json || "[]") as string[];
     const entities = JSON.parse(analysis.entities_json || "{}") as Record<string, unknown>;
-    insertAnalysis.run(
+    await tx.execute(insertAnalysis,[
       analysis.reel_id, analysis.category, analysis.subcategory, analysis.title,
       analysis.summary, analysis.visual_description, analysis.why_interesting,
       analysis.next_action, analysis.ai_action_status, analysis.tags_json,
@@ -183,51 +185,53 @@ const transaction = db.transaction(() => {
       analysis.legacy_entities_json, analysis.confidence, analysis.needs_review,
       analysis.review_reason, analysis.codex_notes, analysis.prompt_version, "es",
       analysis.analyzed_at,
-    );
+    ]);
   }
 
-  db.prepare("DELETE FROM analysis_versions").run();
+  await tx.execute("DELETE FROM analysis_versions");
   const versions = legacy.prepare("SELECT * FROM analysis_versions ORDER BY id").all() as Array<Record<string, any>>;
-  const insertVersion = db.prepare(`
+  const insertVersion = `
     INSERT INTO analysis_versions(id,publication_id,analysis_json,source,created_at)
-    VALUES (?,?,?,?,?)
-  `);
+    VALUES ($1,$2,$3,$4,$5)
+  `;
   for (const version of versions) {
-    insertVersion.run(version.id, version.reel_id, version.analysis_json, version.source, version.created_at);
+    await tx.execute(insertVersion,[version.id, version.reel_id, version.analysis_json, version.source, version.created_at]);
   }
 
   const reviews = legacy.prepare("SELECT * FROM reel_reviews").all() as Array<Record<string, any>>;
-  const insertReview = db.prepare(`
+  const insertReview = `
     INSERT INTO publication_reviews(
       publication_id,review_status,action_status,corrected_category,corrected_analysis_json,
       notes,discarded_reason,reviewed_by_user_id,reviewed_at,created_at,updated_at
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
     ON CONFLICT(publication_id) DO UPDATE SET
       review_status=excluded.review_status,action_status=excluded.action_status,
       corrected_category=excluded.corrected_category,
       corrected_analysis_json=excluded.corrected_analysis_json,notes=excluded.notes,
       discarded_reason=excluded.discarded_reason,reviewed_by_user_id=excluded.reviewed_by_user_id,
       reviewed_at=excluded.reviewed_at,updated_at=excluded.updated_at
-  `);
+  `;
   for (const review of reviews) {
-    insertReview.run(
+    await tx.execute(insertReview,[
       review.reel_id, review.review_status, review.action_status, review.corrected_category,
       review.corrected_analysis_json, review.notes, review.discarded_reason, admin.id,
       review.reviewed_at, review.created_at, review.updated_at,
-    );
+    ]);
   }
+  await tx.execute("SELECT setval(pg_get_serial_sequence('analysis_versions','id'),COALESCE(MAX(id),1),COUNT(*)>0) FROM analysis_versions");
 });
 
-transaction();
-
 const counts = {
-  publications: (db.prepare("SELECT COUNT(*) count FROM publications").get() as { count: number }).count,
-  transcripts: (db.prepare("SELECT COUNT(*) count FROM publications WHERE transcript_text IS NOT NULL").get() as { count: number }).count,
-  analyses: (db.prepare("SELECT COUNT(*) count FROM analyses").get() as { count: number }).count,
-  versions: (db.prepare("SELECT COUNT(*) count FROM analysis_versions").get() as { count: number }).count,
-  reviews: (db.prepare("SELECT COUNT(*) count FROM publication_reviews").get() as { count: number }).count,
+  publications: (await db.one<{count: number}>("SELECT COUNT(*) count FROM publications"))!.count,
+  transcripts: (await db.one<{count: number}>("SELECT COUNT(*) count FROM publications WHERE transcript_text IS NOT NULL"))!.count,
+  analyses: (await db.one<{count: number}>("SELECT COUNT(*) count FROM analyses"))!.count,
+  versions: (await db.one<{count: number}>("SELECT COUNT(*) count FROM analysis_versions"))!.count,
+  reviews: (await db.one<{count: number}>("SELECT COUNT(*) count FROM publication_reviews"))!.count,
   linkedFiles: linked,
   copiedFiles: copied,
   missingPaths: missing,
 };
 console.log(JSON.stringify(counts, null, 2));
+
+legacy.close();
+await pool.end();

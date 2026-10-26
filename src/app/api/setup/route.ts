@@ -20,11 +20,11 @@ async function adminSession() {
 export async function GET() {
   if (!await adminSession()) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   return NextResponse.json({
-    uiLocale: getSetting("ui.locale", "es"),
-    analysisLocale: getSetting("analysis.locale", "es"),
-    transcriptionModel: getSetting("transcription.model", "whisper-1"),
-    openaiConfigured: hasSetting("transcription.openai_api_key"),
-    shareTokenConfigured: hasSetting("api.share_token"),
+    uiLocale: await getSetting("ui.locale", "es"),
+    analysisLocale: await getSetting("analysis.locale", "es"),
+    transcriptionModel: await getSetting("transcription.model", "whisper-1"),
+    openaiConfigured: await hasSetting("transcription.openai_api_key"),
+    shareTokenConfigured: await hasSetting("api.share_token"),
   });
 }
 
@@ -35,16 +35,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_setup", issues: parsed.error.issues }, { status: 400 });
   }
 
-  setSetting("ui.locale", parsed.data.uiLocale);
-  setSetting("analysis.locale", parsed.data.analysisLocale);
-  if (!hasSetting("transcription.provider")) setSetting("transcription.provider", "openai");
-  setSetting("transcription.model", parsed.data.transcriptionModel);
+  await setSetting("ui.locale", parsed.data.uiLocale);
+  await setSetting("analysis.locale", parsed.data.analysisLocale);
+  if (!await hasSetting("transcription.provider")) await setSetting("transcription.provider", "openai");
+  await setSetting("transcription.model", parsed.data.transcriptionModel);
   if (parsed.data.openaiApiKey) {
-    setSetting("transcription.openai_api_key", parsed.data.openaiApiKey, true);
+    await setSetting("transcription.openai_api_key", parsed.data.openaiApiKey, true);
   }
   let shareToken: string | undefined;
-  if (!hasSetting("api.share_token")) shareToken = createShareToken();
-  setSetting("setup.complete", true);
+  if (!await hasSetting("api.share_token")) shareToken = await createShareToken();
+  await setSetting("setup.complete", true);
 
   return NextResponse.json({ ok: true, shareToken });
 }
