@@ -1,5 +1,5 @@
 import Sqlite from "better-sqlite3";
-import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { migrateAppDatabase, pool } from "../src/lib/db";
 import { importSqliteLibrary } from "../src/lib/postgres-import";
@@ -13,10 +13,11 @@ if (!sourcePath || !process.argv.includes("--confirm")) {
 const stamp = new Date().toISOString().replaceAll(":","-").replaceAll(".","-");
 const backup = join(dataDir,"backups",`before-postgresql-${stamp}`);
 mkdirSync(backup,{recursive:true,mode:0o700});
+chmodSync(backup,0o700);
 const live = new Sqlite(sourcePath,{readonly:true,fileMustExist:true});
 try {
   await live.backup(join(backup,"curator.sqlite"));
-  for (const name of ["auth-secret","codex"]) {
+  for (const name of ["auth-secret","codex","secrets"]) {
     const path = join(dirname(sourcePath),name);
     if (existsSync(path)) cpSync(path,join(backup,name),{recursive:true,preserveTimestamps:true});
   }

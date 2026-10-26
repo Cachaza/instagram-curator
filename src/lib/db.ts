@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { Pool, types, defaults, type PoolClient, type QueryResultRow } from "pg";
+import { databaseConfig } from "./database-config";
 import { applicationSchema, searchSchema } from "./postgres-schema";
 
 // JavaScript's exact integer range is an external runtime constraint. Never
@@ -17,13 +17,11 @@ types.setTypeParser(1114, (value) => new Date(value.replace(" ","T") + "Z"));
 
 // Only migration/import tools open SQLite. Runtime data always comes from this
 // shared pool; a missing URL must never silently create an empty local library.
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ...(process.env.CURATOR_DATABASE_CA_FILE ? {
-    ssl: { ca: readFileSync(process.env.CURATOR_DATABASE_CA_FILE, "utf8"), rejectUnauthorized: true },
-  } : {}),
-  allowExitOnIdle: true,
-});
+export const pool = new Pool(databaseConfig());
+// Better Auth wraps signup in one transaction. Serializable isolation makes
+// the initial user-count predicate and insertion indivisible across hosts:
+// competing bootstrap transactions cannot both create an administrator.
+export const authPool = new Pool({...databaseConfig(),options:"-c default_transaction_isolation=serializable"});
 
 export type Database = {
   all<T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<T[]>;

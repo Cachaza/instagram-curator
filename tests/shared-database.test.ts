@@ -43,3 +43,43 @@ test("a second worker refuses ownership before recovering another host's work", 
     expect(result.status,result.stderr).toBe(0);
   });
 });
+
+test("concurrent public bootstrap creates exactly one administrator", async () => {
+  await withPostgresDatabase(async (url) => {
+    const result=runPostgresScript(`
+      import assert from 'node:assert/strict';
+      import {db,pool,authPool,migrateAppDatabase} from './src/lib/db.ts';
+      import {auth} from './src/lib/auth.ts';
+      await migrateAppDatabase();
+      const results=await Promise.allSettled(['first','second'].map(name=>auth.api.signUpEmail({body:{name,email:name+'@example.invalid',password:'synthetic-fixture-password'}})));
+      assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+      assert.equal(results.filter(r=>r.status==='rejected').length,1);
+      assert.equal((await db.one('SELECT COUNT(*) count FROM "user"')).count,1);
+      assert.equal((await db.one('SELECT role FROM "user"')).role,'admin');
+      await pool.end();await authPool.end();
+    `,url);
+    expect(result.status,result.stderr).toBe(0);
+  });
+});
+
+
+test("concurrent retries cannot reset work already retried or claimed", async () => {
+  await withPostgresDatabase(async (url) => {
+    const result=runPostgresScript(`
+      import assert from 'node:assert/strict';
+      import {db,pool,migrateAppDatabase} from './src/lib/db.ts';
+      import {retryPublication} from './src/lib/retry.ts';
+      await migrateAppDatabase();
+      await db.execute("INSERT INTO publications(id,source_url,processing_status,current_stage) VALUES ('retry','https://www.instagram.com/reel/retry/','failed','analyzing')");
+      const results=await Promise.all([retryPublication('retry'),retryPublication('retry')]);
+      assert.equal(results.filter(r=>'next' in r).length,1);
+      assert.equal(results.filter(r=>r.error==='not_failed').length,1);
+      await db.execute("UPDATE publications SET processing_status='analyzing' WHERE id='retry'");
+      assert.equal((await retryPublication('retry')).error,'not_failed');
+      assert.equal((await db.one("SELECT processing_status FROM publications WHERE id='retry'")).processing_status,'analyzing');
+      assert.equal((await db.one('SELECT COUNT(*) count FROM pipeline_events')).count,1);
+      await pool.end();
+    `,url);
+    expect(result.status,result.stderr).toBe(0);
+  });
+});
