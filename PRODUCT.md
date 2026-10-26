@@ -48,7 +48,8 @@ People use the product to import Instagram URLs, follow processing progress, rev
 ## Evidence on Hand
 
 - The repository contains working import, processing, review, library, account, setup, diagnostics, backup, and restore flows.
-- Existing product screenshots are available under `docs/screenshots/`.
+- Public product examples must use synthetic data. Personal library screenshots
+  and design references are kept outside the public repository.
 - No ratings, testimonials, customer claims, pricing claims, or third-party endorsements are available and none should be fabricated.
 
 ## Product Principles
