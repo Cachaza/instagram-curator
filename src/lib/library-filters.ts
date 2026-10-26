@@ -57,3 +57,21 @@ export function libraryHref(query: LibraryQuery, changes: LibraryQuery = {}, cle
   }
   return `/library${params.size ? `?${params}` : ""}`;
 }
+
+// Carry library context across detail pages, including the return page.
+export function publicationHref(id: string, query: LibraryQuery = {}) {
+  const params = new URLSearchParams();
+  for (const key of ["q", "category", "page", ...filterNames]) {
+    if (query[key]) params.set(key, query[key]!);
+  }
+  return `/publications/${encodeURIComponent(id)}${params.size ? `?${params}` : ""}`;
+}
+
+export function publicationNeighbors(items: ContentItem[], id: string, query: LibraryQuery) {
+  const filtered = items.filter((item) => matchesFilters(item, query));
+  const index = filtered.findIndex((item) => item.id === id);
+  return {
+    previous: index > 0 ? filtered[index - 1] : null,
+    next: index >= 0 ? filtered[index + 1] ?? null : null,
+  };
+}

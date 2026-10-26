@@ -1,12 +1,13 @@
-import { ArrowLeft, Check, ExternalLink, MapPin, Sparkles, Utensils } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ExternalLink, MapPin, Sparkles, Utensils } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { categoryInfo } from "@/components/publication-card";
 import { PublicationActions } from "@/components/publication-actions";
-import { getContent } from "@/lib/content";
+import { getContent, listContent } from "@/lib/content";
 import { requireSession } from "@/lib/session";
 import { dictionary } from "@/lib/i18n";
+import { libraryHref, publicationHref, publicationNeighbors, type LibraryQuery } from "@/lib/library-filters";
 import { nestedRecipes, recipeIngredients, recipeSteps } from "@/lib/recipe-entities";
 
 export const dynamic = "force-dynamic";
@@ -121,12 +122,15 @@ function RestaurantPlaces({ entities }: { entities: EntityRecord }) {
   );
 }
 
-export default async function PublicationPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PublicationPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<LibraryQuery> }) {
   await requireSession();
   const t = await dictionary();
   const { id } = await params;
   const item = await getContent(id);
   if (!item) notFound();
+  const query = await searchParams;
+  const { previous, next } = publicationNeighbors(await listContent({ query: query.q }), id, query);
+  const backHref = libraryHref(query, { page: query.page });
   const meta = categoryInfo(item.category);
   const CategoryIcon = meta.Icon;
   const isRecipe = item.category === "recipe";
@@ -139,7 +143,11 @@ export default async function PublicationPage({ params }: { params: Promise<{ id
     !hiddenEntityKeys.has(key) && value != null && value !== "" && (!Array.isArray(value) || value.length > 0));
   return (
     <div className={`detail-page ${isRecipe ? "recipe-detail" : ""} ${isRestaurant ? "restaurant-detail" : ""}`}>
-      <div className="detail-toolbar"><Link href="/library"><ArrowLeft />Volver</Link><PublicationActions id={item.id} title={item.title} sourceUrl={item.sourceUrl} /></div>
+      <div className="detail-toolbar"><Link href={backHref}><ArrowLeft aria-hidden="true" />{t.library.back}</Link><PublicationActions id={item.id} title={item.title} sourceUrl={item.sourceUrl} /></div>
+      <nav className="publication-navigation" aria-label={t.library.browse}>
+        {previous ? <Link className="secondary" rel="prev" href={publicationHref(previous.id, query)} title={previous.title}><ArrowLeft aria-hidden="true" />{t.library.previous}</Link> : <span className="secondary" aria-disabled="true"><ArrowLeft aria-hidden="true" />{t.library.previous}</span>}
+        {next ? <Link className="secondary" rel="next" href={publicationHref(next.id, query)} title={next.title}>{t.library.next}<ArrowRight aria-hidden="true" /></Link> : <span className="secondary" aria-disabled="true">{t.library.next}<ArrowRight aria-hidden="true" /></span>}
+      </nav>
       <div className="detail-grid">
         <section className="detail-media">
           {item.hasVideo ? <video controls preload="metadata" poster={item.hasImage ? `/api/media/${item.id}` : undefined} src={`/api/media/${item.id}?kind=video`} /> : item.hasImage ? <Image src={`/api/media/${item.id}`} width={900} height={1200} unoptimized alt="" /> : <div className="detail-placeholder"><CategoryIcon aria-hidden="true" /></div>}

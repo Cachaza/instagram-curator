@@ -540,3 +540,9 @@ input:focus, select:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba
 .candidate-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 
 .pwa-status { position: relative; z-index: 100; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; padding: 12px; background: var(--card); border-bottom: 1px solid var(--line); }
+
+/* Match existing detail spacing and the accessibility skill's touch target. */
+.publication-navigation { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 22px; }
+.publication-navigation .secondary { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; }
+.publication-navigation svg { width: 17px; height: 17px; }
+.publication-navigation [aria-disabled="true"] { color: var(--muted); background: transparent; }

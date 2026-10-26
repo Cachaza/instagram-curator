@@ -51,7 +51,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
       </form>
       {query.category === "restaurant" && <p><Link className="secondary" href={libraryHref(query).replace("/library", "/map")}>{restaurantMessages[locale].map}</Link></p>}
       <div className="results-row" role="status"><strong>{filtered.length}</strong> {t.results}</div>
-      <div className="masonry-grid">{visible.map((item) => <PublicationCard item={item} locale={locale} key={item.id} />)}</div>
+      <div className="masonry-grid">{visible.map((item) => <PublicationCard item={item} locale={locale} query={{ ...query, page: String(currentPage) }} key={item.id} />)}</div>
       {filtered.length === 0 && <div className="empty-state"><h2>{t.empty}</h2><p>{t.emptyHelp}</p><Link className="secondary" href={libraryHref({}, { category: query.category })}>{t.clear}</Link></div>}
       {totalPages > 1 && <nav className="pagination" aria-label={t.pagination}>{Array.from({ length: totalPages }, (_, index) => {
         const page = index + 1;

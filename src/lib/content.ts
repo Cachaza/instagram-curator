@@ -129,7 +129,7 @@ export async function listContent(options: {
       ${searchOrder}
       CASE WHEN p.saved_order IS NULL THEN 0 ELSE 1 END,
       CASE WHEN p.saved_order IS NULL THEN p.created_at END DESC,
-      p.saved_order ASC${limit}`,[...params])) as Row[]).map(mapRow);
+      p.saved_order ASC,p.id ASC${limit}`,[...params])) as Row[]).map(mapRow);
 }
 
 export async function getContent(id: string, database: Database = db): Promise<ContentItem | null> {

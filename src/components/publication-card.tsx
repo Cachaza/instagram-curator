@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Locale } from "@/lib/messages";
+import { publicationHref, type LibraryQuery } from "@/lib/library-filters";
 import type { ContentItem } from "@/lib/content";
 
 const categoryMeta: Record<string, { label: string; Icon: LucideIcon; className: string }> = {
@@ -45,11 +46,11 @@ export function categoryInfo(category: string, locale: Locale = "es") {
   return locale === "en" ? { ...meta, label: englishCategories[category] ?? meta.label } : meta;
 }
 
-export function PublicationCard({ item, selected = false, locale = "es" }: { item: ContentItem; selected?: boolean; locale?: Locale }) {
+export function PublicationCard({ item, selected = false, locale = "es", query }: { item: ContentItem; selected?: boolean; locale?: Locale; query?: LibraryQuery }) {
   const meta = categoryInfo(item.category, locale);
   const CategoryIcon = meta.Icon;
   return (
-    <Link className={`publication-card ${selected ? "publication-card-selected" : ""}`} href={`/publications/${encodeURIComponent(item.id)}`}>
+    <Link className={`publication-card ${selected ? "publication-card-selected" : ""}`} href={publicationHref(item.id, query)}>
       <div className="card-image">
         {item.hasImage
           ? <Image src={`/api/media/${encodeURIComponent(item.id)}`} width={700} height={440} unoptimized alt="" />

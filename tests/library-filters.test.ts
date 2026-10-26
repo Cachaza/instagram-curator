@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ContentItem } from "../src/lib/content";
-import { filterOptions, libraryHref, matchesFilters } from "../src/lib/library-filters";
+import { filterOptions, libraryHref, matchesFilters, publicationHref, publicationNeighbors } from "../src/lib/library-filters";
 
 function item(category: string, facets: Record<string, unknown>) {
   return { category, facets: { [category]: facets } } as ContentItem;
@@ -46,5 +46,37 @@ describe("library category filters", () => {
     expect(libraryHref({ q: "dinner", category: "restaurant", feature: "terrace" }, { page: "2" })).toBe("/library?q=dinner&category=restaurant&feature=terrace&page=2");
     expect(libraryHref({ q: "dinner", category: "restaurant", feature: "terrace", page: "2" }, { q: undefined })).toBe("/library?category=restaurant&feature=terrace");
     expect(libraryHref({})).toBe("/library");
+  });
+});
+
+
+describe("publication navigation", () => {
+  const items = [
+    { ...restaurants[0], id: "first" },
+    { ...item("recipe", {}), id: "recipe" },
+    { ...restaurants[1], id: "second" },
+    { ...restaurants[2], id: "third" },
+  ];
+
+  test("follows the supplied search order within category and facet filters", () => {
+    expect(publicationNeighbors(items, "second", { category: "restaurant" })).toEqual({ previous: items[0], next: items[3] });
+    expect(publicationNeighbors(items, "first", { category: "restaurant", budget: "€€" })).toEqual({ previous: null, next: items[3] });
+    expect(publicationNeighbors([items[3], items[0]], "third", {})).toEqual({ previous: null, next: items[0] });
+  });
+
+  test("does not wrap at boundaries or navigate from an item outside the results", () => {
+    expect(publicationNeighbors(items, "first", {})).toEqual({ previous: null, next: items[1] });
+    expect(publicationNeighbors(items, "third", {})).toEqual({ previous: items[2], next: null });
+    expect(publicationNeighbors(items, "recipe", { category: "restaurant" })).toEqual({ previous: null, next: null });
+    expect(publicationNeighbors([], "missing", {})).toEqual({ previous: null, next: null });
+  });
+
+  test("carries search, filters and return page safely between detail pages", () => {
+    const query = { q: "rice & noodles", category: "restaurant", cuisine: "Japanese", page: "2", ignored: "value" };
+    const url = new URL(publicationHref("id/with spaces", query), "https://curator.invalid");
+    expect(url.pathname).toBe("/publications/id%2Fwith%20spaces");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ q: query.q, category: query.category, page: "2", cuisine: "Japanese" });
+    expect(libraryHref(Object.fromEntries(url.searchParams), { page: "2" })).toBe("/library?q=rice+%26+noodles&category=restaurant&page=2&cuisine=Japanese");
+    expect(publicationHref("first")).toBe("/publications/first");
   });
 });
