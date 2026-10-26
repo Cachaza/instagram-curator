@@ -53,8 +53,8 @@ export async function curatorUsage() {
     SUM(estimated_credits_micros)::bigint "creditsMicros",SUM(estimated_usd_micros)::bigint "usdMicros"`;
   const totals = (await db.one(`SELECT ${columns} FROM codex_usage`,[])) as Omit<UsageGroup, "model">;
   const byModel = (await db.all(`SELECT model,${columns} FROM codex_usage GROUP BY model ORDER BY "totalTokens" DESC`,[])) as UsageGroup[];
-  const tracking = (await db.one("SELECT applied_at FROM schema_migrations WHERE version=5",[])) as { applied_at: string };
-  return { totals, byModel, trackingSince: tracking!.applied_at };
+  const tracking = await db.one<{ applied_at: Date }>("SELECT applied_at::timestamptz AS applied_at FROM schema_migrations WHERE version=5",[]);
+  return { totals, byModel, trackingSince: tracking?.applied_at.toISOString() ?? null };
 }
 
 export type RateWindow = { usedPercent: number; windowDurationMins: number | null; resetsAt: number | null };

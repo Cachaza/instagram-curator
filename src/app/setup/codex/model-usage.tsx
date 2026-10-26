@@ -11,6 +11,12 @@ type Settings = {
   errors: { models: boolean; config: boolean; limits: boolean; accountTokens: boolean };
 };
 
+export function CodexUsageDate({ value, locale }: { value: string | number | null; locale: Locale }) {
+  const timestamp = value === null || value === "" ? null : new Date(value);
+  if (!timestamp || !Number.isFinite(timestamp.getTime())) return <>{messages[locale].codex.unknown}</>;
+  return <time dateTime={timestamp.toISOString()}>{new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(timestamp)}</time>;
+}
+
 export function CodexModelUsage({ locale }: { locale: Locale }) {
   const t = messages[locale];
   const c = t.codex;
@@ -23,7 +29,6 @@ export function CodexModelUsage({ locale }: { locale: Locale }) {
   const [notice, setNotice] = useState("");
   // Six decimal places retain the protocol's credit/USD micro-unit precision.
   const number = (value: number | null) => value == null ? c.unknown : new Intl.NumberFormat(locale, { maximumFractionDigits: 6 }).format(value);
-  const date = (value: string) => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 
   async function refresh() {
     setLoading(true);
@@ -96,7 +101,7 @@ export function CodexModelUsage({ locale }: { locale: Locale }) {
       <section className="stack">
         <h2>{c.curatorUsage}</h2>
         <p className="muted">{c.trackingHelp}</p>
-        <p>{c.trackingSince}: <time dateTime={`${data.usage.trackingSince.replace(" ", "T")}Z`}>{date(`${data.usage.trackingSince.replace(" ", "T")}Z`)}</time></p>
+        <p>{c.trackingSince}: <CodexUsageDate value={data.usage.trackingSince} locale={locale} /></p>
         {totals && <dl className="codex-usage-values">
           <div><dt>{c.runs}</dt><dd>{number(totals.runs)}</dd></div>
           <div><dt>{c.measured}</dt><dd>{number(totals.measuredRuns)} / {number(totals.runs)}</dd></div>
@@ -126,7 +131,7 @@ export function CodexModelUsage({ locale }: { locale: Locale }) {
           {[bucket.primary, bucket.secondary].map((window, index) => window && <dl className="codex-usage-values" key={index}>
             <div><dt>{c.windowMinutes}</dt><dd>{number(window.windowDurationMins)}</dd></div>
             <div><dt>{c.used}</dt><dd>{number(window.usedPercent)}%</dd></div>
-            <div><dt>{c.resets}</dt><dd>{window.resetsAt == null ? c.unknown : <time dateTime={new Date(window.resetsAt * 1_000).toISOString()}>{date(new Date(window.resetsAt * 1_000).toISOString())}</time>}</dd></div>
+            <div><dt>{c.resets}</dt><dd><CodexUsageDate value={window.resetsAt == null ? null : window.resetsAt * 1_000} locale={locale} /></dd></div>
           </dl>)}
           {bucket.credits && <p>{c.balance}: {bucket.credits.unlimited ? c.unlimited : bucket.credits.balance ?? c.unknown}</p>}
         </section>) : <p>{c.unavailable}</p>}

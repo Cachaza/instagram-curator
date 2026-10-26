@@ -8,6 +8,8 @@ test("Codex usage deduplicates cumulative tokens, preserves nullable cost, failu
       import {db,pool,migrateAppDatabase} from './src/lib/db.ts';
       import {beginCodexUsage,recordCodexTokens,finishCodexUsage,recordCodexCost,curatorUsage} from './src/lib/codex/usage.ts';
       await migrateAppDatabase();
+      await db.execute("UPDATE schema_migrations SET applied_at='2026-10-26 19:53:55.178645+00' WHERE version=5");
+      assert.equal((await curatorUsage()).trackingSince,'2026-10-26T19:53:55.178Z');
       await db.execute("INSERT INTO publications(id,source_url) VALUES ($1,$2)",['usage','https://www.instagram.com/reel/usage/']);
       await beginCodexUsage('thread-usage','usage','resolved-model','medium');
       const event=n=>({threadId:'thread-usage',turnId:'turn-usage',tokenUsage:{total:{inputTokens:n-3,cachedInputTokens:2,outputTokens:3,reasoningOutputTokens:1,totalTokens:n}}});
