@@ -4,6 +4,7 @@ export const messages = {
     runtime: {
       webOnly: "El procesamiento está desactivado en este servidor. Las nuevas importaciones quedan en cola.",
       externalCheck: "No se comprueba en el modo solo web.",
+      awaitingAnalysis: "Pendiente de análisis",
     },
     media: {
       unavailable: "Los archivos multimedia no están disponibles en esta instalación.",
@@ -150,6 +151,7 @@ export const messages = {
     runtime: {
       webOnly: "Processing is disabled on this server. New imports remain queued.",
       externalCheck: "Not checked in web-only mode.",
+      awaitingAnalysis: "Awaiting analysis",
     },
     media: {
       unavailable: "The media files are not available in this installation.",
