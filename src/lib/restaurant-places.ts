@@ -6,6 +6,7 @@ export type RestaurantPlace = {
   key: string;
   name: string;
   hint: string;
+  lookupHint?: string;
   location: PlaceCandidate | null;
 };
 
@@ -20,29 +21,42 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function addressEvidence(value: Record<string, unknown>) {
+  return [value.location_hint, value.address_as_stated, value.address, value.location, value.locality, value.district, value.city, value.region, value.area];
+}
+
+function joinHints(values: unknown[]) {
+  return [...new Set(values.map(text).flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean))].join(", ");
+}
+
+export function restaurantPlaceQuery(place: Pick<RestaurantPlace, "name" | "hint" | "lookupHint">) {
+  return [place.name, place.lookupHint || place.hint].filter(Boolean).join(", ");
+}
+
 // Identity includes the source hint: a corrected address must not reuse an old pin.
 export function restaurantPlaces(item: Pick<ContentItem, "id" | "category" | "entities" | "reviewStatus">): RestaurantPlace[] {
   if (item.category !== "restaurant" || item.reviewStatus === "discarded") return [];
   const entities = item.entities;
   const mentions: unknown[] = Array.isArray(entities.mentioned_places) ? entities.mentioned_places : [];
   const restaurant = record(entities.restaurant);
-  const primaryName = text(entities.restaurant_name) || text(restaurant.name);
-  const primaryHint = text(entities.address_as_stated) || text(entities.address) || text(restaurant.address_as_stated)
-    || text(restaurant.address) || text(restaurant.location)
-    || (Array.isArray(restaurant.mentioned_places) ? restaurant.mentioned_places.map(text).filter(Boolean).join(", ") : "")
-    || text(entities.city);
-  const primary = primaryName ? [{ name: primaryName, location_hint: primaryHint }] : [];
+  const legacyPrimaryName = text(entities.restaurant_name);
+  const primaryName = legacyPrimaryName || text(restaurant.name);
+  const nestedHints = Array.isArray(restaurant.mentioned_places) ? restaurant.mentioned_places.map(text).filter(Boolean) : [];
+  const primaryEvidence = [...addressEvidence(entities), ...addressEvidence(restaurant), ...nestedHints];
+  const primaryIdentityHint = legacyPrimaryName ? text(entities.address_as_stated) : joinHints(primaryEvidence);
+  const primary = primaryName ? [{ name: primaryName, location_hint: primaryIdentityHint }] : [];
   const otherRestaurants = Array.isArray(entities.restaurants) ? entities.restaurants : [];
   const places = new Map<string, RestaurantPlace>();
   for (const value of [...primary, ...mentions, ...otherRestaurants]) {
     const entry = record(value);
     const name = text(entry.name) || (typeof value === "string" && !Object.keys(entry).length ? text(value) : "");
     if (!name) continue;
-    const hint = text(entry.location_hint) || [...new Set([
-      entry.address_as_stated, entry.address, entry.location, entry.locality, entry.district, entry.city, entry.region, entry.area,
-    ].map(text).filter(Boolean))].join(", ");
+    // Preserve existing pin identities. Enrichment belongs to lookup evidence,
+    // not the key of an unchanged legacy mention.
+    const hint = text(entry.location_hint) || text(entry.address_as_stated);
+    const lookupHint = joinHints([...addressEvidence(entry), entities.city, ...(name === primaryName ? primaryEvidence : [])]);
     const key = JSON.stringify([name, hint]);
-    places.set(key, { publicationId: item.id, key, name, hint, location: null });
+    places.set(key, { publicationId: item.id, key, name, hint, lookupHint, location: null });
   }
   return [...places.values()];
 }

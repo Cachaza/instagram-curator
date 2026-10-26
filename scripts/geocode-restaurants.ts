@@ -1,3 +1,4 @@
+import { restaurantPlaceQuery } from "../src/lib/restaurant-places";
 import { pool, authPool } from "../src/lib/db";
 import { geocodeRestaurantLibrary, restaurantGeocodingInventory } from "../src/lib/restaurant-geocoding";
 
@@ -9,7 +10,7 @@ process.once("SIGTERM", () => controller.abort());
 try {
   if (!apply) {
     const { items, places, pending } = await restaurantGeocodingInventory();
-    console.log(JSON.stringify({ mode: "preview", publications: items.length, places: places.length, unmapped: pending.length, uniqueQueries: new Set(pending.map((place) => [place.name, place.hint].filter(Boolean).join(", "))).size, action: "Run with --apply for a one-time lookup. Only unambiguous venue/name/address matches become pins; other results need review." }));
+    console.log(JSON.stringify({ mode: "preview", publications: items.length, places: places.length, unmapped: pending.length, uniqueQueries: new Set(pending.map((place) => restaurantPlaceQuery(place))).size, action: "Run with --apply for a one-time lookup. Only unambiguous venue/name/address matches become pins; other results need review." }));
   } else {
     const runIdIndex = args.indexOf("--run-id");
     const summary = await geocodeRestaurantLibrary({ runId: runIdIndex >= 0 ? args[runIdIndex + 1] : undefined, signal: controller.signal, progress: (value) => console.log(JSON.stringify(value)) });

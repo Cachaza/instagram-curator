@@ -25,7 +25,8 @@ export function parseCandidates(value: unknown): PlaceCandidate[] {
   });
 }
 
-export async function lookupAddress(query: string): Promise<{ cacheKey: string; candidates: PlaceCandidate[] }> {
+export async function lookupAddress(query: string, options: { signal?: AbortSignal } = {}): Promise<{ cacheKey: string; candidates: PlaceCandidate[] }> {
+  options.signal?.throwIfAborted();
   const endpoint = new URL(process.env.CURATOR_GEOCODING_URL || "https://nominatim.openstreetmap.org/search");
   const serviceUrl = endpoint.toString();
   const normalized = query.trim().replace(/\s+/gu, " ");
@@ -47,7 +48,7 @@ export async function lookupAddress(query: string): Promise<{ cacheKey: string; 
     endpoint.searchParams.set("format", "jsonv2");
     let candidates: PlaceCandidate[];
     try {
-      const response = await fetch(endpoint, { headers: { "User-Agent": "InstagramCuratorOSS (https://github.com/Cachaza/instagram-curator)", Accept: "application/json" }, cache: "no-store", redirect: "error" });
+      const response = await fetch(endpoint, { headers: { "User-Agent": "InstagramCuratorOSS (https://github.com/Cachaza/instagram-curator)", Accept: "application/json" }, cache: "no-store", redirect: "error", signal: options.signal });
       if (!response.ok) throw new Error(`geocoding_http_${response.status}`);
       candidates = parseCandidates(await response.json());
     } catch (error) {

@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { distanceMeters, type PlaceCandidate, type RestaurantPlace } from "@/lib/restaurant-places";
+import { restaurantPlaceQuery, distanceMeters, type PlaceCandidate, type RestaurantPlace } from "@/lib/restaurant-places";
 import { restaurantMessages } from "@/lib/restaurant-messages";
 import type { Locale } from "@/lib/messages";
 import type { BrowserPosition } from "./restaurant-map-canvas";
@@ -42,7 +42,7 @@ function PlaceAddress({ place, locale }: { place: RestaurantPlace; locale: Local
   return <details className="place-address">
     <summary aria-label={`${t.locatePlace}: ${place.name}`}>{t.locatePlace}</summary>
     <form onSubmit={lookup}>
-      <label>{t.query}<input name="query" required defaultValue={[place.name, place.hint].filter(Boolean).join(", ")} /></label>
+      <label>{t.query}<input name="query" required defaultValue={restaurantPlaceQuery(place)} /></label>
       <p>{t.geocodingHelp}</p>
       <button className="secondary" disabled={busy}>{busy ? t.searching : t.locatePlace}</button>
     </form>
@@ -100,7 +100,7 @@ export function RestaurantMap({ places, locale, tileUrl, userId }: { places: Res
     {(!mapped.length && !position) && <p>{t.noPins}</p>}
     {(mapped.length > 0 || position) && <MapCanvas places={places} position={position} selected={selected} locale={locale} tileUrl={tileUrl} mapboxToken={provider === "mapbox" ? mapboxToken : undefined} />}
     <div className="restaurant-list">{sorted.map((place) => <article className="restaurant-place" key={JSON.stringify([place.publicationId, place.key])}>
-      <h2>{place.name}</h2>{place.hint && <p>{place.hint}</p>}
+      <h2>{place.name}</h2>{(place.lookupHint || place.hint) && <p>{place.lookupHint || place.hint}</p>}
       <p>{place.location ? t.confirmed : t.pending}{position && place.location && <> · {new Intl.NumberFormat(locale, { style: "unit", unit: "meter", maximumFractionDigits: 0 }).format(distanceMeters(position, place.location))}</>}</p>
       {place.location && <p>{place.location.label}</p>}
       <div className="filter-actions"><Link href={`/publications/${encodeURIComponent(place.publicationId)}`}>{t.open}</Link>{place.location && <><button className="secondary" onClick={() => setSelected({ ...place })}>{t.show}</button><a href={`https://www.google.com/maps/dir/?api=1&destination=${place.location.latitude},${place.location.longitude}`} target="_blank" rel="noreferrer">{t.directions}</a></>}</div>

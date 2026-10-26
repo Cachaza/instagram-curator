@@ -4,14 +4,15 @@ import { listContent } from "./content";
 import { db, pool } from "./db";
 import { GeocodingError, lookupAddress } from "./geocoding";
 import { listRestaurantPlaces, saveRestaurantLocation } from "./restaurant-locations";
-import type { PlaceCandidate, RestaurantPlace } from "./restaurant-places";
+import { restaurantPlaceQuery, type PlaceCandidate, type RestaurantPlace } from "./restaurant-places";
 
 function normalize(value: string) {
   return value.normalize("NFKD").replace(/\p{M}/gu, "").toLocaleLowerCase("en").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
-export function automaticRestaurantMatch(place: Pick<RestaurantPlace, "name" | "hint">, candidates: PlaceCandidate[]) {
-  if (!place.hint.trim()) return null;
+export function automaticRestaurantMatch(place: Pick<RestaurantPlace, "name" | "hint" | "lookupHint">, candidates: PlaceCandidate[]) {
+  const hint = place.lookupHint || place.hint;
+  if (!hint.trim()) return null;
   // OSM's sustenance tags. Never mistake a city/street centroid for a venue.
   const kinds = ["restaurant", "cafe", "bar", "pub", "fast_food", "food_court", "ice_cream", "biergarten"];
   const matches = candidates.filter((candidate) => {
@@ -19,7 +20,7 @@ export function automaticRestaurantMatch(place: Pick<RestaurantPlace, "name" | "
     const [name, ...address] = candidate.label.split(",");
     if (normalize(name) !== normalize(place.name)) return false;
     const addressWords = new Set(normalize(address.join(",")).split(" "));
-    const hintWords = normalize(place.hint).split(" ").filter(Boolean);
+    const hintWords = normalize(hint).split(" ").filter(Boolean);
     return hintWords.length > 0 && hintWords.every((word) => addressWords.has(word));
   });
   const unique = [...new Map(matches.map((candidate) => [candidate.id, candidate])).values()];
@@ -57,18 +58,20 @@ export async function geocodeRestaurantLibrary(options: { runId?: string; signal
       const place = pending[index];
       try {
         options.signal?.throwIfAborted();
-        const query = [place.name, place.hint].filter(Boolean).join(", ");
+        const query = restaurantPlaceQuery(place);
         let result: Awaited<ReturnType<typeof lookupAddress>>;
         for (;;) {
-          try { result = await lookupAddress(query); break; }
+          try { result = await lookupAddress(query, { signal: options.signal }); break; }
           catch (error) {
             if (!(error instanceof GeocodingError) || !["geocoding_capacity", "geocoding_rate_limit"].includes(error.code) || !error.retryAfter) throw error;
             // Use the provider-policy-derived Retry-After; no independent timer.
             await wait(error.retryAfter * 1000, undefined, { signal: options.signal });
           }
         }
+        options.signal?.throwIfAborted();
         const candidate = automaticRestaurantMatch(place, result.candidates);
         if (candidate) {
+          options.signal?.throwIfAborted();
           const saved = await saveRestaurantLocation({ publicationId: place.publicationId, placeKey: place.key, cacheKey: result.cacheKey, candidateId: candidate.id }, `system:geocoding:${runId}`, { onlyIfUnmapped: true });
           if (saved) stats.saved++; else stats.preserved++;
           await event(place.publicationId, saved ? "located" : "preserved", { placeKey: place.key, candidateId: candidate.id });
@@ -80,12 +83,16 @@ export async function geocodeRestaurantLibrary(options: { runId?: string; signal
         publish();
       } catch (error) {
         stats.failed++;
-        const reason = error instanceof GeocodingError ? error.code : options.signal?.aborted ? "cancelled" : "geocoding_batch_failed";
+        const reason = options.signal?.aborted ? "cancelled" : error instanceof GeocodingError ? error.code : "geocoding_batch_failed";
         await event(place.publicationId, "failed", { placeKey: place.key, reason });
         for (const remaining of pending.slice(index + 1)) await event(remaining.publicationId, "deferred", { placeKey: remaining.key, reason });
         publish();
         throw new Error(`Restaurant geocoding stopped at stage geocoding: ${reason}. Completed results are saved; inspect pipeline_events and retry after correcting the cause.`);
       }
+    }
+    if (options.signal?.aborted) {
+      if (items[0]) await event(items[0].id, "batch_cancelled", { ...stats });
+      options.signal.throwIfAborted();
     }
     if (items[0]) await event(items[0].id, "batch_completed", { ...stats });
     return stats;
