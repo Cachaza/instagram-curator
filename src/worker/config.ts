@@ -13,6 +13,7 @@ export function getWorkerConfig() {
     ytdlpCookieFile: getSetting<string>("instagram.cookie_file", ""),
     transcriptionProvider: getSetting<string>("transcription.provider", "openai"),
     transcriptionModel: getSetting<string>("transcription.model", "whisper-1"),
+    localTranscriptionCommand: getSetting<string[]>("transcription.local_command", []),
     openaiApiKey: getSetting<string>("transcription.openai_api_key", ""),
     frameIntervalSeconds: getSetting<number>("media.frame_interval_seconds", 5),
     maxContactSheetFrames: getSetting<number>("media.max_contact_sheet_frames", 9),

@@ -97,6 +97,9 @@ input:focus, select:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba
 .diagnostic-list article > span svg { width: 16px; height: 16px; }
 .diagnostic-list .check-ok > span { background: #dcfce7; color: #15803d; }
 .diagnostic-list .check-failed > span { background: #fee2e2; color: #b91c1c; }
+.diagnostic-list .check-external > span { background: var(--line); color: var(--muted); }
+.runtime-notice,.media-unavailable { color: var(--muted); line-height: 1.6; }
+.media-unavailable a { text-decoration: underline; }
 .diagnostic-list strong,.diagnostic-list small { display: block; }
 .diagnostic-list small { color: var(--muted); overflow-wrap: anywhere; }
 .text-button { border: 0; background: transparent; color: var(--green); padding: 4px; cursor: pointer; }

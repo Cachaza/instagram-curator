@@ -1,6 +1,29 @@
 export const messages = {
   es: {
     appName: "Curator",
+    runtime: {
+      webOnly: "El procesamiento está desactivado en este servidor. Las nuevas importaciones quedan en cola.",
+      externalCheck: "No se comprueba en el modo solo web.",
+    },
+    media: {
+      unavailable: "Los archivos multimedia no están disponibles en esta instalación.",
+      openSource: "Ver publicación en Instagram",
+    },
+    diagnostics: {
+      title: "DIAGNÓSTICO", ready: "Todo preparado", pending: "Quedan ajustes",
+      intro: "Estado de las dependencias de esta instalación.",
+      storage: "Almacenamiento", noWrite: "Sin permisos de escritura",
+      instagram: "Sesión de Instagram", instagramHelp: "Configúrala y valida un reel desde Instagram",
+      local: "Transcripción local", openai: "Transcripción OpenAI",
+      noLocalCommand: "Configura transcription.local_command para ejecutar el modelo local.",
+      noApiKey: "Falta la API key", model: "Modelo", unsupportedProvider: "Proveedor de transcripción no compatible",
+      codex: "Cuenta de Codex", connected: "Conectada", disconnected: "Pendiente de autorización",
+      configure: "Configurar", import: "Importar reel",
+    },
+    codex: {
+      intro: "Autoriza esta instalación con tu suscripción de ChatGPT. La sesión de Codex se guarda en su almacenamiento privado.",
+      connected: "Codex está conectado", active: "La cola de análisis puede usar tu suscripción.", pipeline: "Ver pipeline",
+    },
     common: {
       loading: "Un momento…",
       save: "Guardar",
@@ -124,6 +147,29 @@ export const messages = {
   },
   en: {
     appName: "Curator",
+    runtime: {
+      webOnly: "Processing is disabled on this server. New imports remain queued.",
+      externalCheck: "Not checked in web-only mode.",
+    },
+    media: {
+      unavailable: "The media files are not available in this installation.",
+      openSource: "View publication on Instagram",
+    },
+    diagnostics: {
+      title: "DIAGNOSTICS", ready: "Ready", pending: "Setup required",
+      intro: "Dependency status for this installation.",
+      storage: "Storage", noWrite: "Write permission missing",
+      instagram: "Instagram session", instagramHelp: "Configure the session and validate an Instagram reel",
+      local: "Local transcription", openai: "OpenAI transcription",
+      noLocalCommand: "Configure transcription.local_command to run the local model.",
+      noApiKey: "API key missing", model: "Model", unsupportedProvider: "Unsupported transcription provider",
+      codex: "Codex account", connected: "Connected", disconnected: "Awaiting authorization",
+      configure: "Configure", import: "Import reel",
+    },
+    codex: {
+      intro: "Authorize this installation with your ChatGPT subscription. The Codex session is saved in its private storage.",
+      connected: "Codex is connected", active: "The analysis queue can use your subscription.", pipeline: "View pipeline",
+    },
     common: {
       loading: "Please wait…",
       save: "Save",
