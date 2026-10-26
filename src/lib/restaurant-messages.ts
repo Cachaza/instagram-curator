@@ -1,5 +1,7 @@
 export const restaurantMessages = {
   es: {
+    mapSettings: "Mapas", saveSettings: "Guardar ajustes del mapa", settingsSaved: "Ajustes del mapa guardados.", settingsNotSaved: "El navegador no permite guardar los ajustes. Revisa los permisos de almacenamiento y vuelve a intentarlo.", tokenForgotten: "Token eliminado. Se usará OpenStreetMap.",
+    searchProviderHelp: "Este ajuste cambia el mapa base. La búsqueda de direcciones usa OpenStreetMap con ambos proveedores.",
     zoomIn: "Acercar", zoomOut: "Alejar", mapProvider: "Mapa", publicToken: "Token público de Mapbox", useMapbox: "Usar Mapbox", forgetToken: "Olvidar token",
     tokenHelp: "Usa un token público pk. con acceso de lectura y restringido a la URL de esta app. Se guarda solo en este navegador para tu cuenta. Mapbox factura el uso a tu cuenta. Se usa OpenStreetMap hasta que introduzcas un token.",
     invalidToken: "Introduce un token público de Mapbox que empiece por pk. No uses un token secreto sk.", tokenNotSaved: "El token funciona en esta sesión, pero el navegador no permite guardarlo.",
@@ -21,6 +23,8 @@ export const restaurantMessages = {
     providerError: "No se pudo cargar la búsqueda. Puedes consultar la publicación e intentarlo de nuevo.",
   },
   en: {
+    mapSettings: "Maps", saveSettings: "Save map settings", settingsSaved: "Map settings saved.", settingsNotSaved: "The browser could not save these settings. Check storage permissions and try again.", tokenForgotten: "Token removed. OpenStreetMap will be used.",
+    searchProviderHelp: "This setting changes the base map. Address search uses OpenStreetMap with either provider.",
     zoomIn: "Zoom in", zoomOut: "Zoom out", mapProvider: "Map", publicToken: "Mapbox public token", useMapbox: "Use Mapbox", forgetToken: "Forget token",
     tokenHelp: "Use a public pk. token with read access, restricted to this app's URL. It is saved only in this browser for your account. Mapbox bills usage to your account. OpenStreetMap is used until you enter a token.",
     invalidToken: "Enter a Mapbox public token starting with pk. Do not use a secret sk. token.", tokenNotSaved: "The token works for this session, but the browser could not save it.",

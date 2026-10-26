@@ -7,6 +7,7 @@ import { useState, type FormEvent } from "react";
 import { restaurantPlaceQuery, distanceMeters, type PlaceCandidate, type RestaurantPlace } from "@/lib/restaurant-places";
 import { restaurantMessages } from "@/lib/restaurant-messages";
 import type { Locale } from "@/lib/messages";
+import { useMapPreferences } from "./use-map-preferences";
 import type { BrowserPosition } from "./restaurant-map-canvas";
 
 const MapCanvas = dynamic(() => import("./restaurant-map-canvas"), { ssr: false });
@@ -58,11 +59,7 @@ export function RestaurantMap({ places, locale, tileUrl, userId }: { places: Res
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [selected, setSelected] = useState<RestaurantPlace | null>(null);
-  const [provider, setProvider] = useState<"osm" | "mapbox">("osm");
-  const [mapboxToken, setMapboxToken] = useState("");
-  const [tokenDraft, setTokenDraft] = useState("");
-  const [tokenError, setTokenError] = useState("");
-  const storageKey = `curator-mapbox-public-token:${userId}`;
+  const { provider, token: mapboxToken, ready } = useMapPreferences(userId);
   const mapped = places.filter((place) => place.location);
   const sorted = position ? [...places].sort((a, b) => (a.location ? distanceMeters(position, a.location) : Infinity) - (b.location ? distanceMeters(position, b.location) : Infinity)) : places;
 
@@ -75,30 +72,11 @@ export function RestaurantMap({ places, locale, tileUrl, userId }: { places: Res
     }, () => { setLocationError(t.locationError); setLocating(false); });
   }
 
-  function chooseProvider(value: string) {
-    setTokenError("");
-    if (value === "osm") { setProvider("osm"); return; }
-    try {
-      const saved = localStorage.getItem(storageKey) ?? "";
-      setTokenDraft(saved); setMapboxToken(saved.startsWith("pk.") ? saved : "");
-    } catch { setTokenDraft(""); setMapboxToken(""); }
-    setProvider("mapbox");
-  }
-
-  function saveToken(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const token = tokenDraft.trim();
-    if (!/^pk\.[A-Za-z0-9_.-]+$/.test(token)) { setTokenError(t.invalidToken); return; }
-    setMapboxToken(token); setTokenError("");
-    try { localStorage.setItem(storageKey, token); } catch { setTokenError(t.tokenNotSaved); }
-  }
-
   return <>
-    <div className="map-tools"><button className="primary" disabled={locating} onClick={locate}>{locating ? t.locating : t.locate}</button><label>{t.mapProvider}<select value={provider} onChange={(event) => chooseProvider(event.target.value)}><option value="osm">OpenStreetMap</option><option value="mapbox">Mapbox</option></select></label><span>{mapped.length} {t.mapped} · {places.length - mapped.length} {t.unmapped}</span></div>
+    <div className="map-tools"><button className="primary" disabled={locating} onClick={locate}>{locating ? t.locating : t.locate}</button><span>{mapped.length} {t.mapped} · {places.length - mapped.length} {t.unmapped}</span></div>
     <p className="source-caveat">{t.locationHelp}</p><p role="status">{locationError}</p>
-    {provider === "mapbox" && <form className="map-token-form" onSubmit={saveToken}><label>{t.publicToken}<input type="password" autoComplete="off" value={tokenDraft} onChange={(event) => setTokenDraft(event.target.value)} placeholder="pk.…" required /></label><p>{t.tokenHelp}</p><button className="secondary">{t.useMapbox}</button><button className="secondary" type="button" onClick={() => { setMapboxToken(""); setTokenDraft(""); setProvider("osm"); try { localStorage.removeItem(storageKey); } catch { /* Public token is already cleared from memory. */ } }}>{t.forgetToken}</button><p role="status">{tokenError}</p></form>}
     {(!mapped.length && !position) && <p>{t.noPins}</p>}
-    {(mapped.length > 0 || position) && <MapCanvas places={places} position={position} selected={selected} locale={locale} tileUrl={tileUrl} mapboxToken={provider === "mapbox" ? mapboxToken : undefined} />}
+    {ready && (mapped.length > 0 || position) && <MapCanvas places={places} position={position} selected={selected} locale={locale} tileUrl={tileUrl} mapboxToken={provider === "mapbox" ? mapboxToken : undefined} />}
     <div className="restaurant-list">{sorted.map((place) => <article className="restaurant-place" key={JSON.stringify([place.publicationId, place.key])}>
       <h2>{place.name}</h2>{(place.lookupHint || place.hint) && <p>{place.lookupHint || place.hint}</p>}
       <p>{place.location ? t.confirmed : t.pending}{position && place.location && <> · {new Intl.NumberFormat(locale, { style: "unit", unit: "meter", maximumFractionDigits: 0 }).format(distanceMeters(position, place.location))}</>}</p>
