@@ -13,6 +13,9 @@ data/
 coverage/
 *.tsbuildinfo
 .DS_Store
+# Personal screenshots and design references belong in the private data archive.
+docs/screenshots/
+docs/design/
 .impeccable/config.local.json
 .impeccable/questions/
 .agents/skills/impeccable/

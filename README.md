@@ -14,8 +14,6 @@ Tailscale, and keep its database and credentials under your control.
 > available to users over a network, you must offer those users the
 > corresponding source code under the same license.
 
-![Curator dashboard](docs/screenshots/dashboard.png)
-
 ## What it does
 
 - Imports Instagram reels, posts, and multi-image carousels from a URL.
@@ -30,13 +28,6 @@ Tailscale, and keep its database and credentials under your control.
 - Supports an administrator and locally-created household accounts.
 - Stores application state in SQLite and media on the local filesystem.
 - Includes tested backup, restore, legacy migration, Docker, and systemd flows.
-
-<table>
-  <tr>
-    <td width="68%"><img src="docs/screenshots/library.png" alt="Curator searchable library"></td>
-    <td width="32%"><img src="docs/screenshots/mobile-dashboard.png" alt="Curator mobile dashboard"></td>
-  </tr>
-</table>
 
 ## How the pipeline works
 
@@ -114,6 +105,10 @@ It excludes uncommitted changes and prints the published image digest. Set
 `CURATOR_IMAGE` or `CURATOR_IMAGE_PLATFORM` to target another registry or platform.
 Build-time database and auth state are removed before assembling the runtime
 image; persistent state belongs in the mounted data volume.
+Documentation images are excluded from the Docker context. Public examples must
+use synthetic data; personal library screenshots are not distributed with the
+application. The local publisher also rejects known private-data paths in the
+committed revision before building or pushing.
 The pinned Bun 1.3 runtime uses its baseline x64 binary so building under Mac
 emulation does not select an AVX2 binary that fails on the older KVM host.
 
@@ -329,7 +324,7 @@ src/lib/             database, auth, setup, content, and Codex integration
 src/worker/          download, media, transcription, and analysis pipeline
 scripts/             migrations, backups, restore, and service installation
 deploy/              systemd unit
-docs/                architecture notes and screenshots
+docs/                architecture notes; public examples must use synthetic data
 data/                private runtime state; never committed
 ```
 

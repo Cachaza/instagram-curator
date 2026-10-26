@@ -13,3 +13,5 @@
 - Keep stable internal identifiers in English. User-facing copy must support
   Spanish and English.
 - Do not invent external facts such as restaurant ratings, locations, or prices.
+- Public screenshots and design references must use synthetic data, never a
+  private library. Keep personal captures under the ignored data directory.
