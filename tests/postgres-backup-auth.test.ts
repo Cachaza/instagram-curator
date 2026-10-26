@@ -7,13 +7,14 @@ test("PostgreSQL auth survives backup and restore with synthetic private files",
       const script = `
         import assert from 'node:assert/strict';
         import { spawnSync } from 'node:child_process';
-        import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+        import { mkdtempSync, mkdirSync, chmodSync, statSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
         import { tmpdir } from 'node:os';
         import { join } from 'node:path';
         const sourceUrl = ${JSON.stringify(sourceUrl)};
         const targetUrl = ${JSON.stringify(targetUrl)};
         const dataDir = process.env.CURATOR_DATA_DIR;
         const backupDir = mkdtempSync(join(tmpdir(), 'curator-backup-test-'));
+        chmodSync(backupDir,0o755);
         const secret = 'synthetic-auth-secret-preserved-across-restore';
         writeFileSync(join(dataDir, 'auth-secret'), secret + '\\n', { mode: 0o600 });
         mkdirSync(join(dataDir, 'media', 'synthetic'), { recursive: true });
@@ -96,6 +97,8 @@ test("PostgreSQL auth survives backup and restore with synthetic private files",
           assert.match(populated.stderr + populated.stdout, /requires an empty target/);
 
           const manifestPath = join(backupDir, 'manifest.json');
+          assert.equal(statSync(backupDir).mode & 0o777,0o700);
+          assert.equal(statSync(join(backupDir,'private-files.tar.gz')).mode & 0o777,0o600);
           const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
           writeFileSync(join(backupDir, 'library.json'), readFileSync(join(backupDir, 'library.json'), 'utf8') + ' ');
           const tampered = spawnSync('node', ['--import', 'tsx', 'scripts/restore.ts', backupDir, '--confirm'], {

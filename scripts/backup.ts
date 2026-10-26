@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, openSync, closeSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -9,6 +9,10 @@ import { dataDir } from "../src/lib/paths";
 const stamp = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
 const target = resolve(process.argv[2] ?? join(dataDir, "backups", stamp));
 mkdirSync(target, { recursive: true, mode: 0o700 });
+chmodSync(target,0o700);
+// tar must never create a credential archive under the caller's permissive umask.
+const archive = join(target,"private-files.tar.gz");
+closeSync(openSync(archive,"wx",0o600));
 try {
   const tables = await transaction(async (tx) => {
     await tx.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
@@ -21,7 +25,7 @@ try {
   const files = ["media","auth-secret","codex","secrets"].filter((name) => existsSync(join(dataDir,name)));
   if (!files.includes("media")) mkdirSync(join(dataDir,"media"),{recursive:true});
   if (!files.includes("media")) files.push("media");
-  const tar = spawnSync("tar",["-czf",join(target,"private-files.tar.gz"),"-C",dataDir,...files],{encoding:"utf8"});
+  const tar = spawnSync("tar",["-czf",archive,"-C",dataDir,...files],{encoding:"utf8"});
   if (tar.status !== 0) throw new Error(tar.stderr || "Could not archive private files");
   writeFileSync(join(target,"manifest.json"),JSON.stringify({format:2,createdAt:new Date().toISOString(),database:"library.json",sha256:createHash("sha256").update(json).digest("hex"),files:"private-files.tar.gz"},null,2),{mode:0o600});
   console.log(target);
