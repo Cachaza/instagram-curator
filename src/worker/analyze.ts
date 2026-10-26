@@ -82,7 +82,7 @@ function prompt(item: Publication, locale: string): string {
   return `Analyze this saved Instagram publication for a private knowledge library.
 Return only the structured result requested by the output schema, in ${locale === "en" ? "English" : "Spanish"}. entities_json and facets_json must each contain one valid JSON object encoded as a string.
 Use only the supplied caption, transcript and image. Never invent ratings, exact prices, addresses, ingredients, quantities or claims not supported by the source.
-For restaurants capture mentioned_places and restaurant facets only when evidenced. Use this exact shape:
+For restaurants capture entities.mentioned_places as an array of {"name":"restaurant name","location_hint":"address, city or area explicitly stated, or null"}. Include every named restaurant; never infer a city or coordinates. Capture restaurant facets only when evidenced. Use this exact facet shape:
 {"restaurant":{"cuisine":[],"budget":null,"occasion":[],"features":[]}}
 For recipes capture dish_name, ingredients and steps. Use this exact facet shape:
 {"recipe":{"nutritionGoals":[],"foodStyles":[],"mealType":null,"dietaryTags":[],"estimatedTimeMinutes":null}}
@@ -142,7 +142,7 @@ export async function processNextAnalysis(): Promise<boolean> {
           review_reason=excluded.review_reason,codex_notes=excluded.codex_notes,
           prompt_version=excluded.prompt_version,output_locale=excluded.output_locale,
           analyzed_at=CURRENT_TIMESTAMP
-      `,[item.id,analysis.category,analysis.subcategory,analysis.title,analysis.summary,analysis.visual_description,analysis.why_interesting,analysis.next_action,analysis.action_status,JSON.stringify(analysis.tags),JSON.stringify(analysis.entities),JSON.stringify(analysis.facets),analysis.confidence,analysis.needs_review ? 1 : 0,analysis.review_reason,analysis.codex_notes,"v3",locale]));
+      `,[item.id,analysis.category,analysis.subcategory,analysis.title,analysis.summary,analysis.visual_description,analysis.why_interesting,analysis.next_action,analysis.action_status,JSON.stringify(analysis.tags),JSON.stringify(analysis.entities),JSON.stringify(analysis.facets),analysis.confidence,analysis.needs_review ? 1 : 0,analysis.review_reason,analysis.codex_notes,"v4",locale]));
       (await tx.execute(`
         UPDATE publications SET processing_status='analyzed',current_stage='analyzed',
           action_status=$1,review_status='unreviewed',last_error=NULL,updated_at=CURRENT_TIMESTAMP

@@ -1,4 +1,15 @@
 export const applicationSchema = `
+    CREATE TABLE IF NOT EXISTS restaurant_geocodes (
+      cache_key TEXT PRIMARY KEY,
+      candidates_json TEXT NOT NULL DEFAULT '[]',
+      last_error TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS geocoding_service_requests (
+      service_url TEXT PRIMARY KEY,
+      requested_at TIMESTAMPTZ NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
       value_json TEXT NOT NULL,
@@ -97,6 +108,15 @@ export const applicationSchema = `
       reviewed_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS restaurant_locations (
+      publication_id TEXT NOT NULL REFERENCES publications(id) ON DELETE CASCADE,
+      place_key TEXT NOT NULL,
+      location_json TEXT NOT NULL,
+      confirmed_by_user_id TEXT NOT NULL,
+      confirmed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(publication_id, place_key)
     );
 
     CREATE TABLE IF NOT EXISTS schema_migrations (

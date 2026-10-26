@@ -16,6 +16,7 @@ import {
   Utensils,
   type LucideIcon,
 } from "lucide-react";
+import type { Locale } from "@/lib/messages";
 import type { ContentItem } from "@/lib/content";
 
 const categoryMeta: Record<string, { label: string; Icon: LucideIcon; className: string }> = {
@@ -33,12 +34,19 @@ const categoryMeta: Record<string, { label: string; Icon: LucideIcon; className:
   reference: { label: "Referencia", Icon: Bookmark, className: "cat-stone" },
 };
 
-export function categoryInfo(category: string) {
-  return categoryMeta[category] ?? { label: category.replaceAll("_", " "), Icon: Shapes, className: "cat-stone" };
+const englishCategories: Record<string, string> = {
+  restaurant: "Restaurant", recipe: "Recipe", travel: "Travel", technology: "Technology",
+  startup_idea: "Idea", startup_advice: "Business", clothing: "Style", mountain_gear: "Outdoors",
+  fitness: "Fitness", home: "Home", entertainment: "Culture", reference: "Reference", unknown: "Uncategorized",
+};
+
+export function categoryInfo(category: string, locale: Locale = "es") {
+  const meta = categoryMeta[category] ?? { label: category.replaceAll("_", " "), Icon: Shapes, className: "cat-stone" };
+  return locale === "en" ? { ...meta, label: englishCategories[category] ?? meta.label } : meta;
 }
 
-export function PublicationCard({ item, selected = false }: { item: ContentItem; selected?: boolean }) {
-  const meta = categoryInfo(item.category);
+export function PublicationCard({ item, selected = false, locale = "es" }: { item: ContentItem; selected?: boolean; locale?: Locale }) {
+  const meta = categoryInfo(item.category, locale);
   const CategoryIcon = meta.Icon;
   return (
     <Link className={`publication-card ${selected ? "publication-card-selected" : ""}`} href={`/publications/${encodeURIComponent(item.id)}`}>
@@ -51,7 +59,7 @@ export function PublicationCard({ item, selected = false }: { item: ContentItem;
       <div className="card-copy">
         <h2>{item.title}</h2>
         <p>{item.summary}</p>
-        <div><span>{new Intl.DateTimeFormat("es", { day: "numeric", month: "short" }).format(new Date(item.publishedAt))}</span><strong>Abrir <span aria-hidden="true">→</span></strong></div>
+        <div><span>{new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(new Date(item.publishedAt))}</span><strong>{locale === "en" ? "Open" : "Abrir"} <span aria-hidden="true">→</span></strong></div>
       </div>
     </Link>
   );

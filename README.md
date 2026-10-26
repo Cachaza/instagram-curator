@@ -154,6 +154,46 @@ For integration tests, configure `CURATOR_TEST_DATABASE_URL` with a loopback
 PostgreSQL server and a disposable admin database named `curator_test`. Tests
 create and remove isolated databases; they never fall back to DATABASE_URL.
 
+Curator can be installed as a PWA from an HTTPS deployment (localhost also
+works for development/testing). In Chromium, use the browser's **Install app**
+action; on iPhone/iPad, use Safari's **Share → Add to Home Screen**. The installed
+app opens in its own window and retains the existing sign-in flow.
+
+The production build registers a service worker with Spanish/English offline
+fallback pages. It caches only those public pages and app icons. Library content,
+API responses, media and map tiles are not stored in its offline cache, so using
+the library, imports and maps requires a connection. Service-worker registration
+is disabled during `bun run dev` to avoid interfering with development. To test
+installation and offline fallback locally, use `bun run build` followed by
+`bun run start`. When changing offline pages or icons, bump the cache version in
+`public/sw.js` so existing installations receive the updated fallback assets.
+
+Restaurant maps are available at `/map`, or **View on map** in the restaurant
+category. Choose **Find address**, add a city/address if necessary, and confirm
+the matching result before a pin is saved. Existing imports do not need to be
+reanalyzed. Address lookup uses Nominatim/OpenStreetMap, caches results in the
+shared PostgreSQL database, and enforces its one-query-per-second application
+limit. It runs only on request, with no bulk lookup or autocomplete. Empty
+results can be refined by changing the query; provider failures can be retried.
+Run `bun run db:migrate` after upgrading to add the map tables.
+
+OpenStreetMap is the default basemap. Each signed-in user can optionally choose
+Mapbox and enter their own public `pk.` token with read access, restricted to the
+app's URL. The token is stored only in that browser, scoped to the user; it is
+never saved in the shared database. The Mapbox choice uses the Static Tiles API
+and bills that user's Mapbox account; address lookup continues to use
+OpenStreetMap so saved coordinates do not depend on Mapbox's temporary-geocoding
+storage restrictions. **Forget token** removes the saved browser token.
+
+**Near me** requests browser location permission when pressed and sorts confirmed
+places by straight-line distance. The position is not saved or sent to Curator's
+server. Basemap providers receive tile requests for the viewed area. Browser
+geolocation requires a secure context (HTTPS, or localhost for development).
+Operators can change `CURATOR_GEOCODING_URL` to a Nominatim-compatible provider
+and `CURATOR_MAP_TILE_URL` to another OSM-compatible raster tile service without
+changing source code. A replacement tile service must permit OpenStreetMap-only
+attribution, or its required attribution must be added before use.
+
 For development:
 
 ```bash

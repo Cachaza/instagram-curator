@@ -1,98 +1,61 @@
 import Link from "next/link";
-import { LayoutGrid, SlidersHorizontal } from "lucide-react";
-import { categories, listContent } from "@/lib/content";
+import { LayoutGrid, Search, SlidersHorizontal } from "lucide-react";
+import { listContent } from "@/lib/content";
 import { PublicationCard, categoryInfo } from "@/components/publication-card";
 import { requireSession } from "@/lib/session";
+import { dictionary, appLocale } from "@/lib/i18n";
+import { restaurantMessages } from "@/lib/restaurant-messages";
+import { filterOptions, filtersFor, libraryHref, matchesFilters } from "@/lib/library-filters";
 
 export const dynamic = "force-dynamic";
-
-const FACET_QUERY_KEYS = ["cuisine", "budget", "recipeGoal", "recipeStyle", "fitnessGoal", "muscleGroup"];
 
 export default async function LibraryPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireSession();
   const query = await searchParams;
-  const all = await listContent({ category: query.category, query: query.q });
-  const filtered = all.filter((item) => {
-    const restaurant = item.facets.restaurant as Record<string, unknown> | undefined;
-    const recipe = item.facets.recipe as Record<string, unknown> | undefined;
-    const fitness = item.facets.fitness as Record<string, unknown> | undefined;
-    const includes = (value: unknown, selected?: string) => !selected || (Array.isArray(value) && value.includes(selected));
-    if (query.category === "restaurant") {
-      return includes(restaurant?.cuisine, query.cuisine)
-        && (!query.budget || restaurant?.budget === query.budget);
-    }
-    if (query.category === "recipe") {
-      return includes(recipe?.nutritionGoals, query.recipeGoal)
-        && includes(recipe?.foodStyles, query.recipeStyle);
-    }
-    if (query.category === "fitness") {
-      return includes(fitness?.goals, query.fitnessGoal)
-        && includes(fitness?.muscleGroups, query.muscleGroup);
-    }
-    return true;
-  });
-  const currentPage = Math.max(1, Number(query.page) || 1);
+  const locale = await appLocale();
+  const t = (await dictionary(locale)).library;
+  const all = await listContent({ query: query.q });
+  const filtered = all.filter((item) => matchesFilters(item, query));
+  // Preserve the library's existing page capacity.
   const pageSize = 60;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const requestedPage = Number(query.page);
+  const currentPage = Number.isSafeInteger(requestedPage) ? Math.min(totalPages, Math.max(1, requestedPage)) : 1;
   const visible = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const categoryRows = await categories();
-  const facets = {
-    cuisines: new Set<string>(), recipeGoals: new Set<string>(), recipeStyles: new Set<string>(),
-    fitnessGoals: new Set<string>(), muscles: new Set<string>(),
-  };
-  for (const item of await listContent()) {
-    const add = (target: Set<string>, value: unknown) => Array.isArray(value) && value.forEach((entry) => typeof entry === "string" && target.add(entry));
-    const r = item.facets.restaurant as Record<string, unknown> | undefined;
-    const recipe = item.facets.recipe as Record<string, unknown> | undefined;
-    const fitness = item.facets.fitness as Record<string, unknown> | undefined;
-    add(facets.cuisines, r?.cuisine); add(facets.recipeGoals, recipe?.nutritionGoals);
-    add(facets.recipeStyles, recipe?.foodStyles); add(facets.fitnessGoals, fitness?.goals);
-    add(facets.muscles, fitness?.muscleGroups);
-  }
-  const params = new URLSearchParams(Object.entries(query).filter((entry): entry is [string,string] => Boolean(entry[1])));
-  const categoryHref = (category?: string) => {
-    const next = new URLSearchParams(params);
-    FACET_QUERY_KEYS.forEach((key) => next.delete(key));
-    next.delete("page");
-    if (category) next.set("category", category);
-    else next.delete("category");
-    return `/library?${next}`;
-  };
-  const select = (name: string, label: string, values: Set<string>) => <label>{label}<select name={name} defaultValue={query[name] ?? ""}><option value="">Cualquiera</option>{[...values].sort().map((value) => <option key={value}>{value}</option>)}</select></label>;
-  const hasRelevantFilters = ["restaurant", "recipe", "fitness"].includes(query.category ?? "");
-  const hasActiveFilter = FACET_QUERY_KEYS.some((key) => Boolean(query[key]));
+  const categoryCounts = new Map<string, number>();
+  for (const item of all) categoryCounts.set(item.category, (categoryCounts.get(item.category) ?? 0) + 1);
+  // Keep the selected category reachable when a search has no matches.
+  if (query.category && !categoryCounts.has(query.category)) categoryCounts.set(query.category, 0);
+  const filters = filtersFor(query.category);
+  const hasActiveFilter = filters.some(({ name }) => Boolean(query[name]));
   return (
     <div className="page-container">
-      <section className="page-hero"><p className="section-kicker">DESCUBRE DE NUEVO</p><h1>Explorar<span>.</span></h1><p>Encuentra esa idea que sabías que habías guardado en algún sitio.</p></section>
-      <div className="category-pills"><Link className={!query.category ? "active" : ""} href={categoryHref()}><LayoutGrid aria-hidden="true" /> Todo</Link>{categoryRows.map((row) => {
-        const meta = categoryInfo(row.category); const CategoryIcon = meta.Icon; return <Link className={query.category === row.category ? "active" : ""} href={categoryHref(row.category)} key={row.category}><CategoryIcon aria-hidden="true" /> {meta.label} <small>{row.count}</small></Link>;
-      })}</div>
-      {hasRelevantFilters && <details className="advanced-filters" open={hasActiveFilter}>
-        <summary><SlidersHorizontal />Filtros avanzados</summary>
-        <form>
-          {query.q && <input type="hidden" name="q" value={query.q} />}
-          {query.category && <input type="hidden" name="category" value={query.category} />}
-          {query.category === "restaurant" && <>
-            {select("cuisine","Tipo de comida",facets.cuisines)}
-            <label>Precio<select name="budget" defaultValue={query.budget ?? ""}><option value="">Cualquiera</option>{["€","€€","€€€","€€€€"].map((value) => <option key={value}>{value}</option>)}</select></label>
-          </>}
-          {query.category === "recipe" && <>
-            {select("recipeGoal","Objetivo nutricional",facets.recipeGoals)}
-            {select("recipeStyle","Estilo de receta",facets.recipeStyles)}
-          </>}
-          {query.category === "fitness" && <>
-            {select("fitnessGoal","Objetivo fitness",facets.fitnessGoals)}
-            {select("muscleGroup","Grupo muscular",facets.muscles)}
-          </>}
-          <button className="primary">Aplicar</button>
-        </form>
-      </details>}
-      <div className="results-row"><strong>{filtered.length}</strong> hallazgos</div>
-      <div className="masonry-grid">{visible.map((item) => <PublicationCard item={item} key={item.id} />)}</div>
-      {filtered.length === 0 && <div className="empty-state"><h2>Nada por aquí</h2><p>Prueba con otra búsqueda o quita algún filtro.</p></div>}
-      {totalPages > 1 && <nav className="pagination">{Array.from({ length: totalPages }, (_, index) => {
-        const page = index + 1; const next = new URLSearchParams(params); next.set("page", String(page));
-        return <Link className={page === currentPage ? "active" : ""} href={`/library?${next}`} key={page}>{page}</Link>;
+      <section className="page-hero compact-hero"><h1>{t.title}<span>.</span></h1><p>{t.intro}</p></section>
+      <nav className="category-pills" aria-label={t.category}>
+        <Link className={!query.category ? "active" : ""} aria-current={!query.category ? "page" : undefined} href={libraryHref(query, { category: undefined }, true)}><LayoutGrid aria-hidden="true" />{t.allCategories}<small>{all.length}</small></Link>
+        {[...categoryCounts].map(([category, count]) => {
+          const meta = categoryInfo(category, locale); const CategoryIcon = meta.Icon;
+          return <Link className={query.category === category ? "active" : ""} aria-current={query.category === category ? "page" : undefined} href={libraryHref(query, { category }, true)} key={category}><CategoryIcon aria-hidden="true" />{meta.label}<small>{count}</small></Link>;
+        })}
+      </nav>
+      <form className="library-search" action="/library">
+        {query.category && <input type="hidden" name="category" value={query.category} />}
+        <label className="library-query">{t.search}<span><Search aria-hidden="true" /><input type="search" name="q" defaultValue={query.q ?? ""} placeholder={t.searchPlaceholder} /></span></label>
+        {filters.length > 0 && <fieldset className="library-filters"><legend><SlidersHorizontal aria-hidden="true" />{t.filters}</legend>
+          {filters.map(({ name }) => <label key={name}>{t[name]}<select name={name} defaultValue={query[name] ?? ""}><option value="">{t.any}</option>{filterOptions(all, query, name).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>)}
+        </fieldset>}
+        <div className="filter-actions"><button className="primary" type="submit">{filters.length ? t.apply : t.search}</button>
+          {hasActiveFilter && <Link className="secondary" href={libraryHref(query, {}, true)}>{t.clear}</Link>}
+          {query.q && <Link className="secondary" href={libraryHref(query, { q: undefined })}>{t.clearSearch}</Link>}
+        </div>
+      </form>
+      {query.category === "restaurant" && <p><Link className="secondary" href={libraryHref(query).replace("/library", "/map")}>{restaurantMessages[locale].map}</Link></p>}
+      <div className="results-row" role="status"><strong>{filtered.length}</strong> {t.results}</div>
+      <div className="masonry-grid">{visible.map((item) => <PublicationCard item={item} locale={locale} key={item.id} />)}</div>
+      {filtered.length === 0 && <div className="empty-state"><h2>{t.empty}</h2><p>{t.emptyHelp}</p><Link className="secondary" href={libraryHref({}, { category: query.category })}>{t.clear}</Link></div>}
+      {totalPages > 1 && <nav className="pagination" aria-label={t.pagination}>{Array.from({ length: totalPages }, (_, index) => {
+        const page = index + 1;
+        return <Link className={page === currentPage ? "active" : ""} aria-current={page === currentPage ? "page" : undefined} href={libraryHref(query, { page: String(page) })} key={page}>{page}</Link>;
       })}</nav>}
     </div>
   );

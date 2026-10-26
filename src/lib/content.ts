@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db, type Database } from "./db";
 import { normalizeFacets } from "./facets";
 import { ftsQuery } from "./search";
 import { resolveMediaPath } from "./media";
@@ -132,8 +132,8 @@ export async function listContent(options: {
       p.saved_order ASC${limit}`,[...params])) as Row[]).map(mapRow);
 }
 
-export async function getContent(id: string): Promise<ContentItem | null> {
-  const row = (await db.one(`${SELECT} WHERE p.id=$1 AND ${VISIBLE_CONTENT}`,[id])) as Row | undefined;
+export async function getContent(id: string, database: Database = db): Promise<ContentItem | null> {
+  const row = (await database.one(`${SELECT} WHERE p.id=$1 AND ${VISIBLE_CONTENT}`,[id])) as Row | undefined;
   return row ? mapRow(row) : null;
 }
 

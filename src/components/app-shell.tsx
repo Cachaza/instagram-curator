@@ -1,70 +1,60 @@
 "use client";
 
-import {
-  Activity, CheckSquare, Library, Menu, PlusCircle,
-  Github, Search, Settings, Sparkles, Users, X,
-} from "lucide-react";
+import { Activity, CheckSquare, Github, ListChecks, Library, MapPin, MoreHorizontal, PlusCircle, Settings, Sparkles, Users } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { usePathname } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { messages, type Locale } from "@/lib/messages";
 
 export function AppShell({ children, locale }: { children: React.ReactNode; locale: Locale }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [mobileOpen, setMobileOpen] = useState(false);
   const session = authClient.useSession();
   const t = messages[locale].shell;
-  const navigation = [
+  const primary = [
     { href: "/library", label: t.explore, icon: Library },
-    { href: "/review", label: t.review, icon: CheckSquare },
-    { href: "/pipeline", label: t.processing, icon: Activity },
     { href: "/import", label: t.add, icon: PlusCircle },
+    { href: "/review", label: t.review, icon: CheckSquare },
+  ];
+  const secondary = [
+    { href: "/map", label: t.restaurants, icon: MapPin },
+    { href: "/actions", label: t.actions, icon: ListChecks },
+    { href: "/pipeline", label: t.processing, icon: Activity },
+    { href: "/members", label: t.members, icon: Users },
+    { href: "/setup", label: t.settings, icon: Settings },
   ];
   if (pathname === "/sign-in") return children;
 
-  function search(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const query = String(new FormData(event.currentTarget).get("q") ?? "").trim();
-    router.push(query ? `/library?q=${encodeURIComponent(query)}` : "/library");
+  function active(href: string) { return pathname.startsWith(href); }
+  function navLink({ href, label, icon: Icon }: { href: string; label: string; icon: typeof Library }) {
+    return <Link key={href} href={href} className={active(href) ? "nav-active" : ""} aria-current={active(href) ? "page" : undefined}><Icon />{label}</Link>;
   }
 
   return (
     <div className="curator-shell">
-      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
-        <div className="logo"><span aria-hidden="true">◩</span><strong>curator</strong><button aria-label={t.closeNavigation} onClick={() => setMobileOpen(false)}><X /></button></div>
-        <nav>
-          {navigation.map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href} onClick={() => setMobileOpen(false)} className={pathname.startsWith(href) ? "nav-active" : ""}>
-              <Icon />{label}
-            </Link>
-          ))}
-        </nav>
+      <a className="skip-link" href="#main-content">{t.skipToContent}</a>
+      <aside className="sidebar">
+        <div className="logo"><span aria-hidden="true">◩</span><strong>curator</strong></div>
+        <nav aria-label={t.primaryNavigation}>{primary.map(navLink)}</nav>
         <div className="sidebar-bottom">
-          <Link href="/members"><Users />{t.members}</Link>
-          <Link href="/setup"><Settings />{t.settings}</Link>
+          <nav aria-label={t.secondaryNavigation}>{secondary.map(navLink)}</nav>
           <a href="https://github.com/Cachaza/instagram-curator" target="_blank" rel="noreferrer"><Github />{t.sourceCode}</a>
           <div className="feed-card"><Sparkles /><strong>{t.archiveTitle}</strong><span>{t.archiveBody}</span></div>
         </div>
       </aside>
-      {mobileOpen && <button className="sidebar-backdrop" aria-label={t.closeNavigation} onClick={() => setMobileOpen(false)} />}
       <header className="app-header">
-        <button className="mobile-menu" aria-label={t.openNavigation} onClick={() => setMobileOpen(true)}><Menu /></button>
-        <Link className="mobile-brand" href="/library" aria-label="Curator, explorar"><span aria-hidden="true">◩</span>curator</Link>
-        <form className="global-search" onSubmit={search}><Search /><input name="q" placeholder={t.searchPlaceholder} aria-label={t.search} /></form>
-        <Link className="header-add" href="/import"><PlusCircle />{t.add}</Link>
+        <Link className="mobile-brand" href="/library" aria-label={t.brandHome}><span aria-hidden="true">◩</span>curator</Link>
+        <Link className="header-add" href="/import" aria-current={active("/import") ? "page" : undefined}><PlusCircle />{t.add}</Link>
         <div className="user-menu">
           <span>{session.data?.user.name ?? t.account}</span>
           <button onClick={() => authClient.signOut({ fetchOptions: { onSuccess: () => location.assign("/sign-in") } })}>{t.signOut}</button>
         </div>
+        <details className="mobile-more" key={pathname}>
+          <summary aria-label={t.openSecondaryNavigation}><MoreHorizontal /></summary>
+          <nav aria-label={t.secondaryNavigation}>{secondary.map(navLink)}<a href="https://github.com/Cachaza/instagram-curator" target="_blank" rel="noreferrer"><Github />{t.sourceCode}</a><span>{session.data?.user.name ?? t.account}</span><button onClick={() => authClient.signOut({ fetchOptions: { onSuccess: () => location.assign("/sign-in") } })}>{t.signOut}</button></nav>
+        </details>
       </header>
-      <main className="app-main">{children}</main>
-      <nav className="mobile-nav">
-        {navigation.slice(0, 3).map(({ href, label, icon: Icon }) => (
-          <Link key={href} href={href} className={pathname.startsWith(href) ? "nav-active" : ""}><Icon /><span>{label}</span></Link>
-        ))}
-      </nav>
+      <main className="app-main" id="main-content" tabIndex={-1}>{children}</main>
+      <nav className="mobile-nav" aria-label={t.primaryNavigation}>{primary.map(navLink)}</nav>
     </div>
   );
 }

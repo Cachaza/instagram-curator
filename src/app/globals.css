@@ -142,22 +142,21 @@ input:focus, select:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba
 .feed-card svg { color: var(--sunbeam); }
 .feed-card span { color: #c7cbd0; font-size: 12px; line-height: 1.5; }
 .app-header { position: sticky; top: 0; z-index: 40; display: flex; height: 64px; align-items: center; gap: 12px; margin-left: 240px; border-bottom: 1px solid var(--line); background: rgba(242,239,234,.96); padding: 0 28px; }
-.global-search { position: relative; width: min(100%, 430px); margin-left: auto; }
-.global-search svg { position: absolute; left: 13px; top: 50%; width: 16px; transform: translateY(-50%); color: #a8a29e; }
-.global-search input { height: 40px; border-radius: 4px; background: var(--card); padding-left: 40px; }
 .header-add { display: flex; min-height: 40px; align-items: center; gap: 7px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: var(--card); padding: 9px 12px; font-size: 13px; font-weight: 800; }
-.header-add svg, .mobile-menu svg { width: 17px; height: 17px; }
-.user-menu { display: flex; align-items: center; gap: 9px; font-size: 12px; }
+.header-add svg { width: 17px; height: 17px; }
+.user-menu { margin-left: auto; display: flex; align-items: center; gap: 9px; font-size: 12px; }
 .user-menu button { border: 0; background: transparent; color: var(--ink); cursor: pointer; }
-.mobile-menu { display: none; min-width: 44px; min-height: 44px; border: 0; background: transparent; }
 .mobile-brand { display: none; }
+.mobile-more { display: none; }
+.skip-link { position: fixed; top: 8px; left: 8px; z-index: 100; transform: translateY(-160%); border-radius: 4px; background: var(--card); padding: 10px 14px; color: var(--ink); }
+.skip-link:focus { transform: translateY(0); }
 .app-main { min-height: calc(100dvh - 64px); margin-left: 240px; padding-bottom: 40px; }
 .app-main > .content, .app-main > .centered, .app-main > .app-shell { width: min(1450px, calc(100% - 48px)); margin: 0 auto; }
 .app-main > .centered { min-height: calc(100dvh - 64px); }
 .app-main .app-shell { min-height: auto; }
 .app-main .app-shell .topbar { display: none; }
 .app-main .app-shell .content { width: 100%; padding-top: 54px; }
-.sidebar-backdrop, .mobile-nav { display: none; }
+.mobile-nav { display: none; }
 .brand-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--green); margin-right: 8px; }
 .topbar nav { display: flex; gap: 8px; }
 .topbar nav a, .topbar nav span { padding: 8px 12px; color: var(--muted); font-size: 14px; }
@@ -415,24 +414,20 @@ input:focus, select:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba
   .centered { padding: 20px 16px; }
   .auth-card { padding: 30px 26px; }
   .auth-brand { margin-bottom: 28px; }
-  .sidebar { transform: translateX(-105%); transition: transform .2s ease; }
-  .sidebar.sidebar-open { transform: translateX(0); }
-  .logo > button { display: block; }
-  .sidebar-backdrop { position: fixed; inset: 0; z-index: 45; display: block; border: 0; background: rgba(0,0,0,.3); }
+  .sidebar { display: none; }
   .app-header { height: 62px; margin-left: 0; padding: max(4px, env(safe-area-inset-top)) 12px 4px; }
-  .mobile-menu { display: grid; place-items: center; padding: 0; }
   .mobile-brand { display: flex; min-height: 44px; align-items: center; gap: 7px; font-family: "Avenir Next Condensed", "Arial Narrow", sans-serif; font-size: 19px; font-weight: 600; letter-spacing: .02em; }
   .mobile-brand span { font-family: ui-sans-serif, system-ui, sans-serif; }
   .user-menu { display: none; }
-  .header-add { display: flex; min-width: 44px; min-height: 44px; padding: 0 10px; }
+  .header-add { display: none; }
   .header-add svg { width: 18px; }
-  .global-search { width: 44px; margin-left: auto; }
-  .global-search input { width: 44px; padding: 0; color: transparent; cursor: pointer; }
-  .global-search input::placeholder { color: transparent; }
-  .global-search svg { left: 14px; color: var(--ink); pointer-events: none; }
-  .global-search:focus-within { position: absolute; inset: 8px 12px; z-index: 2; width: auto; }
-  .global-search:focus-within input { width: 100%; padding: 0 38px 0 40px; color: var(--ink); cursor: text; }
-  .global-search:focus-within input::placeholder { color: #78716c; }
+  .mobile-more { position: relative; display: block; margin-left: auto; }
+  .mobile-more summary { display: grid; width: 44px; height: 44px; place-items: center; cursor: pointer; list-style: none; }
+  .mobile-more summary::-webkit-details-marker { display: none; }
+  .mobile-more summary svg { width: 20px; height: 20px; }
+  .mobile-more nav { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; display: grid; min-width: 200px; gap: 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); padding: 8px; box-shadow: 0 8px 24px rgba(26,29,32,.14); }
+  .mobile-more nav a, .mobile-more nav button, .mobile-more nav span { display: flex; min-height: 40px; align-items: center; gap: 10px; border: 0; background: transparent; padding: 8px 10px; color: var(--ink); text-align: left; }
+  .mobile-more nav svg { width: 18px; height: 18px; }
   .app-main { margin-left: 0; padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
   .app-main > .content, .app-main > .centered, .app-main > .app-shell { width: min(100% - 28px, 1450px); }
   .mobile-nav { position: fixed; inset: auto 0 0; z-index: 40; display: flex; min-height: 70px; align-items: center; justify-content: space-around; border-top: 1px solid var(--line); border-radius: 0; background: rgba(250,249,246,.98); padding: 7px 8px max(7px, env(safe-area-inset-bottom)); box-shadow: 0 -8px 24px rgba(26,29,32,.08); }
@@ -514,3 +509,34 @@ input:focus, select:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Library filters use the existing form spacing and touch targets. */
+.library-search { display: grid; gap: 17px; margin-bottom: 26px; }
+.library-query { max-width: 680px; }
+.library-query > span { display: flex; align-items: center; gap: 8px; }
+.library-query svg, .library-filters legend svg { width: 16px; flex: none; }
+.library-query input { width: 100%; }
+.library-filters { display: flex; flex-wrap: wrap; gap: 12px; min-width: 0; margin: 0; padding: 17px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+.library-filters legend { padding: 0 8px; font-size: 13px; font-weight: 800; }
+.library-filters legend svg { vertical-align: middle; margin-right: 8px; }
+.library-filters label { flex: 1 1 calc(50% - 12px); min-width: 0; }
+.library-filters select { width: 100%; }
+.filter-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+/* Map occupies half the viewport so its list remains reachable on mobile.
+   Wordmark dimensions come from Mapbox GL JS's official 88 x 23 logo. */
+.restaurant-map-frame { position: relative; isolation: isolate; }
+.restaurant-map { height: 50dvh; border: 1px solid var(--line); border-radius: 8px; }
+.mapbox-wordmark { position: absolute; z-index: 1000; bottom: 8px; left: 8px; display: block; width: 88px; height: 23px; background: url('/mapbox-logo.svg') no-repeat; }
+.map-tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 26px; }
+.map-tools > span { color: var(--muted); }
+.map-token-form, .place-address form { display: grid; gap: 12px; margin: 17px 0; }
+.restaurant-list { display: grid; gap: 17px; margin-top: 26px; }
+.restaurant-place { padding: 17px 0; border-top: 1px solid var(--line); }
+.restaurant-place h2 { margin: 0; }
+.place-address { margin-top: 17px; }
+.place-address summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; text-decoration: underline; }
+.candidate-list { display: grid; gap: 12px; padding: 0; list-style: none; }
+.candidate-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+
+.pwa-status { position: relative; z-index: 100; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; padding: 12px; background: var(--card); border-bottom: 1px solid var(--line); }

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Existing Curator square/diagonal mark. A 40%-wide square fits inside
+       the central 80%-diameter maskable safe circle (diagonal about 57%). -->
+  <path fill="#e8bc4d" d="M0 0h100v100H0z"/>
+  <path fill="#1a1d20" d="M30 30h40v40H30z"/>
+  <path fill="#e8bc4d" d="m30 30 40 40H30z"/>
+</svg>
