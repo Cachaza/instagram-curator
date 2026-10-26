@@ -3,6 +3,7 @@ import { AlertTriangle, Bot, CheckCircle2, Clock3, Download, FileAudio } from "l
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/session";
 import { RetryButton } from "./retry-button";
+import { dictionary } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ const statusMeta: Record<string, { label: string; icon: typeof Clock3 }> = {
   downloading: { label: "Descargando", icon: Download },
   extracting_media: { label: "Extrayendo multimedia", icon: FileAudio },
   transcribing: { label: "Transcribiendo", icon: FileAudio },
-  ready_for_analysis: { label: "Esperando a Codex", icon: Bot },
+  ready_for_analysis: { label: "Pendiente de análisis", icon: Bot },
   analyzing: { label: "Analizando", icon: Bot },
   ready_for_review: { label: "Lista para revisar", icon: CheckCircle2 },
   analyzed: { label: "Analizada", icon: CheckCircle2 },
@@ -20,6 +21,7 @@ const statusMeta: Record<string, { label: string; icon: typeof Clock3 }> = {
 
 export default async function PipelinePage() {
   await requireSession();
+  const t = dictionary();
   const statuses = db.prepare("SELECT processing_status status,COUNT(*) count FROM publications GROUP BY processing_status ORDER BY count DESC")
     .all() as Array<{ status: string; count: number }>;
   const failures = db.prepare("SELECT id,source_url,current_stage,last_error,attempts,updated_at FROM publications WHERE processing_status='failed' ORDER BY updated_at DESC LIMIT 20")
@@ -29,9 +31,10 @@ export default async function PipelinePage() {
   return (
     <div className="page-container">
       <section className="page-hero"><p className="section-kicker">ESTADO OPERATIVO</p><h1>Pipeline<span>.</span></h1><p>Descargas, transcripciones, análisis y errores persistidos en tiempo real.</p></section>
+      {process.env.CURATOR_WEB_ONLY === "1" && <p className="runtime-notice">{t.runtime.webOnly}</p>}
       <div className="pipeline-status-grid">{statuses.map(({ status, count }) => {
         const meta = statusMeta[status] ?? { label: status, icon: Clock3 }; const Icon = meta.icon;
-        return <article key={status}><Icon /><strong>{count}</strong><span>{meta.label}</span></article>;
+        return <article key={status}><Icon /><strong>{count}</strong><span>{status === "ready_for_analysis" ? t.runtime.awaitingAnalysis : meta.label}</span></article>;
       })}</div>
       <div className="two-panel-grid">
         <section className="panel"><div className="section-title"><h2>Actividad reciente</h2></div><div className="event-list">{events.map((event) => <div key={event.id}><span className={`event-dot event-${event.event_type}`} /><div><strong>{event.stage}</strong><small>{event.source_url}</small><p>{event.message}</p></div></div>)}</div></section>

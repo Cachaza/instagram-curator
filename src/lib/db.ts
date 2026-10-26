@@ -166,6 +166,215 @@ export function migrateAppDatabase(): void {
   `);
   db.prepare("INSERT OR IGNORE INTO schema_migrations(version,name) VALUES (?,?)")
     .run(1, "complete-curator-model");
+
+  db.transaction(() => {
+    // Web and worker can start together: acquire the write lock before checking.
+    if (db.prepare("SELECT 1 FROM schema_migrations WHERE version=4").get()) return;
+    db.exec(`CREATE TABLE codex_usage (
+      thread_id TEXT PRIMARY KEY,
+      publication_id TEXT REFERENCES publications(id) ON DELETE SET NULL,
+      turn_id TEXT,
+      model TEXT,
+      reasoning_effort TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','completed','failed')),
+      input_tokens INTEGER,
+      cached_input_tokens INTEGER,
+      output_tokens INTEGER,
+      reasoning_output_tokens INTEGER,
+      total_tokens INTEGER,
+      estimated_credits_micros INTEGER,
+      estimated_usd_micros INTEGER,
+      started_at TEXT NOT NULL,
+      completed_at TEXT
+    )`);
+    db.prepare("INSERT INTO schema_migrations(version,name) VALUES (4,'codex-usage')").run();
+  }).immediate();
+
+  const hasSearchMigration = db.prepare(
+    "SELECT 1 FROM schema_migrations WHERE version=?",
+  ).get(2);
+  if (!hasSearchMigration) {
+    db.transaction(() => {
+      db.exec(`
+        CREATE VIRTUAL TABLE content_search USING fts5(
+          publication_id UNINDEXED,
+          title,
+          tags,
+          summary,
+          body,
+          tokenize = 'unicode61 remove_diacritics 2'
+        );
+
+        CREATE VIEW content_search_documents AS
+        SELECT
+          p.id publication_id,
+          COALESCE(json_extract(r.corrected_analysis_json, '$.title'), a.title, '') title,
+          COALESCE(json_extract(r.corrected_analysis_json, '$.tags'), a.tags_json, '') tags,
+          COALESCE(json_extract(r.corrected_analysis_json, '$.summary'), a.summary, '') summary,
+          concat_ws(' ',
+            p.author, p.caption, p.transcript_text,
+            COALESCE(r.corrected_category, a.category), a.subcategory,
+            a.visual_description, a.why_interesting, a.next_action,
+            a.entities_json, a.facets_json, r.corrected_analysis_json, r.notes
+          ) body
+        FROM publications p
+        JOIN analyses a ON a.publication_id=p.id
+        LEFT JOIN publication_reviews r ON r.publication_id=p.id;
+
+        CREATE TRIGGER content_search_analysis_insert AFTER INSERT ON analyses BEGIN
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=NEW.publication_id;
+        END;
+
+        CREATE TRIGGER content_search_analysis_update AFTER UPDATE ON analyses BEGIN
+          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=NEW.publication_id;
+        END;
+
+        CREATE TRIGGER content_search_analysis_delete AFTER DELETE ON analyses BEGIN
+          DELETE FROM content_search WHERE publication_id=OLD.publication_id;
+        END;
+
+        CREATE TRIGGER content_search_publication_update
+        AFTER UPDATE OF author,caption,transcript_text ON publications BEGIN
+          DELETE FROM content_search WHERE publication_id=NEW.id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=NEW.id;
+        END;
+
+        CREATE TRIGGER content_search_publication_delete AFTER DELETE ON publications BEGIN
+          DELETE FROM content_search WHERE publication_id=OLD.id;
+        END;
+
+        CREATE TRIGGER content_search_review_insert AFTER INSERT ON publication_reviews BEGIN
+          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=NEW.publication_id;
+        END;
+
+        CREATE TRIGGER content_search_review_update AFTER UPDATE ON publication_reviews BEGIN
+          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=NEW.publication_id;
+        END;
+
+        CREATE TRIGGER content_search_review_delete AFTER DELETE ON publication_reviews BEGIN
+          DELETE FROM content_search WHERE publication_id=OLD.publication_id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=OLD.publication_id;
+        END;
+
+        INSERT INTO content_search(publication_id,title,tags,summary,body)
+        SELECT publication_id,title,tags,summary,body FROM content_search_documents;
+      `);
+      db.prepare("INSERT INTO schema_migrations(version,name) VALUES (?,?)")
+        .run(2, "sqlite-fts5-search");
+    })();
+  }
+
+  const hasSearchContentMigration = db.prepare(
+    "SELECT 1 FROM schema_migrations WHERE version=?",
+  ).get(3);
+  if (!hasSearchContentMigration) {
+    db.transaction(() => {
+      db.exec(`
+        DROP TRIGGER content_search_analysis_insert;
+        DROP TRIGGER content_search_analysis_update;
+        DROP TRIGGER content_search_analysis_delete;
+        DROP TRIGGER content_search_publication_update;
+        DROP TRIGGER content_search_publication_delete;
+        DROP TRIGGER content_search_review_insert;
+        DROP TRIGGER content_search_review_update;
+        DROP TRIGGER content_search_review_delete;
+        DROP VIEW content_search_documents;
+
+        CREATE VIEW content_search_documents AS
+        SELECT
+          p.id publication_id,
+          COALESCE(json_extract(r.corrected_analysis_json, '$.title'), a.title,
+            NULLIF(trim(p.caption), ''), NULLIF(trim(p.author), ''), 'Sin título') title,
+          COALESCE(json_extract(r.corrected_analysis_json, '$.tags'), a.tags_json, '') tags,
+          COALESCE(json_extract(r.corrected_analysis_json, '$.summary'), a.summary, '') summary,
+          concat_ws(' ',
+            p.author, p.caption, p.transcript_text,
+            COALESCE(r.corrected_category, a.category), a.subcategory,
+            a.visual_description, a.why_interesting, a.next_action,
+            a.entities_json, a.facets_json, r.corrected_analysis_json, r.notes
+          ) body
+        FROM publications p
+        LEFT JOIN analyses a ON a.publication_id=p.id
+        LEFT JOIN publication_reviews r ON r.publication_id=p.id
+        WHERE p.processing_status IN ('ready_for_analysis','analyzed');
+
+        CREATE TRIGGER content_search_analysis_insert AFTER INSERT ON analyses BEGIN
+          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=NEW.publication_id;
+        END;
+
+        CREATE TRIGGER content_search_analysis_update AFTER UPDATE ON analyses BEGIN
+          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=NEW.publication_id;
+        END;
+
+        CREATE TRIGGER content_search_analysis_delete AFTER DELETE ON analyses BEGIN
+          DELETE FROM content_search WHERE publication_id=OLD.publication_id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=OLD.publication_id;
+        END;
+
+        CREATE TRIGGER content_search_publication_update
+        AFTER UPDATE OF author,caption,transcript_text,processing_status ON publications BEGIN
+          DELETE FROM content_search WHERE publication_id=NEW.id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=NEW.id;
+        END;
+
+        CREATE TRIGGER content_search_publication_delete AFTER DELETE ON publications BEGIN
+          DELETE FROM content_search WHERE publication_id=OLD.id;
+        END;
+
+        CREATE TRIGGER content_search_review_insert AFTER INSERT ON publication_reviews BEGIN
+          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=NEW.publication_id;
+        END;
+
+        CREATE TRIGGER content_search_review_update AFTER UPDATE ON publication_reviews BEGIN
+          DELETE FROM content_search WHERE publication_id=NEW.publication_id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=NEW.publication_id;
+        END;
+
+        CREATE TRIGGER content_search_review_delete AFTER DELETE ON publication_reviews BEGIN
+          DELETE FROM content_search WHERE publication_id=OLD.publication_id;
+          INSERT INTO content_search(publication_id,title,tags,summary,body)
+          SELECT publication_id,title,tags,summary,body
+          FROM content_search_documents WHERE publication_id=OLD.publication_id;
+        END;
+
+        DELETE FROM content_search;
+        INSERT INTO content_search(publication_id,title,tags,summary,body)
+        SELECT publication_id,title,tags,summary,body FROM content_search_documents;
+      `);
+      db.prepare("INSERT INTO schema_migrations(version,name) VALUES (?,?)")
+        .run(3, "fts-search-unanalysed-publications");
+    })();
+  }
 }
 
 migrateAppDatabase();
