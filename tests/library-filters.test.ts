@@ -36,6 +36,13 @@ describe("library category filters", () => {
     expect(matchesFilters(item("fitness", { equipment: ["barbell"] }), { category: "fitness", equipment: "barbell" })).toBe(true);
   });
 
+  test("matches review and action status filters", () => {
+    const reviewed = { ...item("restaurant", {}), reviewStatus: "approved", actionStatus: "done" } as ContentItem;
+    expect(matchesFilters(reviewed, { review: "approved", action: "done" })).toBe(true);
+    expect(matchesFilters(reviewed, { review: "unreviewed" })).toBe(false);
+    expect(matchesFilters(reviewed, { action: "all" })).toBe(true);
+  });
+
   test("changing category clears all facets and pagination while preserving search", () => {
     const href = libraryHref({ q: "ramen & noodles", category: "restaurant", cuisine: "Japanese", budget: "€€", occasion: "dinner", page: "2" }, { category: "recipe" }, true);
     const params = new URL(href, "https://curator.invalid").searchParams;
@@ -72,11 +79,11 @@ describe("publication navigation", () => {
   });
 
   test("carries search, filters and return page safely between detail pages", () => {
-    const query = { q: "rice & noodles", category: "restaurant", cuisine: "Japanese", page: "2", ignored: "value" };
+    const query = { q: "rice & noodles", category: "restaurant", cuisine: "Japanese", page: "2", sort: "oldest", review: "corrected", action: "done", ignored: "value" };
     const url = new URL(publicationHref("id/with spaces", query), "https://curator.invalid");
     expect(url.pathname).toBe("/publications/id%2Fwith%20spaces");
-    expect(Object.fromEntries(url.searchParams)).toEqual({ q: query.q, category: query.category, page: "2", cuisine: "Japanese" });
-    expect(libraryHref(Object.fromEntries(url.searchParams), { page: "2" })).toBe("/library?q=rice+%26+noodles&category=restaurant&page=2&cuisine=Japanese");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ q: query.q, category: query.category, page: "2", cuisine: "Japanese", sort: "oldest", review: "corrected", action: "done" });
+    expect(libraryHref(Object.fromEntries(url.searchParams), { page: "2" })).toBe("/library?q=rice+%26+noodles&category=restaurant&page=2&cuisine=Japanese&sort=oldest&review=corrected&action=done");
     expect(publicationHref("first")).toBe("/publications/first");
   });
 });

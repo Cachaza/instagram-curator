@@ -23,9 +23,13 @@
     "auth:migrate": "tsx scripts/migrate.ts",
     "test": "bun test ./tests",
     "migrate:postgres": "tsx scripts/migrate-postgres.ts",
-    "db:tunnel": "tsx scripts/database-tunnel.ts"
+    "db:tunnel": "bun run scripts/database-tunnel.ts",
+    "mcp": "bun run scripts/mcp.ts",
+    "mcp:tunnel:doctor": "bun run scripts/mcp-tunnel.ts doctor",
+    "mcp:tunnel:start": "bun run scripts/mcp-tunnel.ts run"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "better-auth": "^1.6.24",
     "better-sqlite3": "^12.4.1",
     "kysely": "^0.29.7",

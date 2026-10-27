@@ -129,7 +129,12 @@ export default async function PublicationPage({ params, searchParams }: { params
   const item = await getContent(id);
   if (!item) notFound();
   const query = await searchParams;
-  const { previous, next } = publicationNeighbors(await listContent({ query: query.q }), id, query);
+  const { previous, next } = publicationNeighbors(await listContent({
+    query: query.q,
+    sort: query.sort === "newest" || query.sort === "oldest" ? query.sort : undefined,
+    review: query.review && query.review !== "all" ? query.review : undefined,
+    action: query.action && query.action !== "all" ? query.action : undefined,
+  }), id, query);
   const backHref = libraryHref(query, { page: query.page });
   const meta = categoryInfo(item.category);
   const CategoryIcon = meta.Icon;

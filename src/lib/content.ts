@@ -105,7 +105,7 @@ const VISIBLE_CONTENT = `(a.publication_id IS NOT NULL OR p.processing_status='a
     (NULLIF(trim(p.caption),'') IS NOT NULL OR NULLIF(trim(p.transcript_text),'') IS NOT NULL)))`;
 
 export async function listContent(options: {
-  category?: string; query?: string; review?: string; action?: string; limit?: number;
+  category?: string; query?: string; review?: string; action?: string; sort?: "newest" | "oldest"; limit?: number;
 } = {}): Promise<ContentItem[]> {
   const clauses = [VISIBLE_CONTENT];
   const params: Array<string | number> = [];
@@ -121,15 +121,20 @@ export async function listContent(options: {
     ? "JOIN content_search ON content_search.publication_id=p.id"
     : "";
   const searchPosition = params.indexOf(search) + 1;
-  const searchOrder = search
+  const searchOrder = search && !options.sort
     ? `ts_rank(content_search.document,to_tsquery('curator_search',$${searchPosition})) DESC,`
     : "";
+  const dateOrder = options.sort === "oldest"
+    ? `CASE WHEN p.saved_order IS NULL THEN 1 ELSE 0 END,
+      CASE WHEN p.saved_order IS NULL THEN p.created_at END ASC,
+      p.saved_order DESC,p.id DESC`
+    : `CASE WHEN p.saved_order IS NULL THEN 0 ELSE 1 END,
+      CASE WHEN p.saved_order IS NULL THEN p.created_at END DESC,
+      p.saved_order ASC,p.id ASC`;
   return ((await db.all(`${SELECT} ${searchJoin} WHERE ${clauses.join(" AND ")}
     ORDER BY
       ${searchOrder}
-      CASE WHEN p.saved_order IS NULL THEN 0 ELSE 1 END,
-      CASE WHEN p.saved_order IS NULL THEN p.created_at END DESC,
-      p.saved_order ASC,p.id ASC${limit}`,[...params])) as Row[]).map(mapRow);
+      ${dateOrder}${limit}`,[...params])) as Row[]).map(mapRow);
 }
 
 export async function getContent(id: string, database: Database = db): Promise<ContentItem | null> {

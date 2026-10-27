@@ -454,3 +454,10 @@ Copyright © 2026 David Cachaza.
 ---
 
 Built for people who save far more than Instagram makes easy to find again.
+
+## ChatGPT library MCP
+
+Browse the library by newest/oldest saves and filter review/action status on
+`/library`. A private stdio MCP also lets ChatGPT search, read full video details,
+list categories, and optionally organize saves. See
+[ChatGPT MCP and private tunnel setup](docs/chatgpt-mcp.md).

@@ -24,6 +24,7 @@ export const categoryFilters = {
 export type LibraryQuery = Record<string, string | undefined>;
 export type FilterName = (typeof categoryFilters)[keyof typeof categoryFilters][number]["name"];
 const filterNames = Object.values(categoryFilters).flat().map(({ name }) => name);
+const libraryStateNames = ["sort", "review", "action"] as const;
 
 export function filtersFor(category?: string) {
   return categoryFilters[category as keyof typeof categoryFilters] ?? [];
@@ -37,7 +38,9 @@ function facetValues(item: ContentItem, field: string): string[] {
 }
 
 export function matchesFilters(item: ContentItem, query: LibraryQuery, except?: string) {
-  return (!query.category || item.category === query.category) && filtersFor(query.category).every(({ name, field }) =>
+  return (!query.category || item.category === query.category) &&
+    (!query.review || query.review === "all" || item.reviewStatus === query.review) &&
+    (!query.action || query.action === "all" || item.actionStatus === query.action) && filtersFor(query.category).every(({ name, field }) =>
     name === except || !query[name] || facetValues(item, field).includes(query[name]!));
 }
 
@@ -61,7 +64,7 @@ export function libraryHref(query: LibraryQuery, changes: LibraryQuery = {}, cle
 // Carry library context across detail pages, including the return page.
 export function publicationHref(id: string, query: LibraryQuery = {}) {
   const params = new URLSearchParams();
-  for (const key of ["q", "category", "page", ...filterNames]) {
+  for (const key of ["q", "category", "page", ...filterNames, ...libraryStateNames]) {
     if (query[key]) params.set(key, query[key]!);
   }
   return `/publications/${encodeURIComponent(id)}${params.size ? `?${params}` : ""}`;
