@@ -1,0 +1,24 @@
+[Unit]
+Description=Instagram Curator MCP private OpenAI tunnel
+Wants=network-online.target
+After=network-online.target networking.service
+StartLimitIntervalSec=0
+
+[Service]
+User=curator-mcp
+Group=curator-mcp
+WorkingDirectory=/opt/mcps/instagram-curator
+Environment=HOME=/var/lib/curator-mcp
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/etc/mcps/curator.env
+ExecStart=/usr/local/bin/tunnel-client run --control-plane.base-url=https://api.openai.com --control-plane.tunnel-id=${CURATOR_TUNNEL_ID} --control-plane.api-key=env:CONTROL_PLANE_API_KEY "--mcp.command=command=/usr/bin/node --import tsx /opt/mcps/instagram-curator/src/mcp/cli.ts" --health.listen-addr=127.0.0.1:0
+Restart=always
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/curator-mcp
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

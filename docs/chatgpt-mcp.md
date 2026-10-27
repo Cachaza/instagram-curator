@@ -103,3 +103,19 @@ one. Local tests validate the protocol and database behavior but do not verify
 your live ChatGPT connection.
 
 Official reference: [OpenAI Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels).
+
+## Always-on host
+
+[`deploy/instagram-curator-mcp.service`](../deploy/instagram-curator-mcp.service)
+provides the same systemd isolation as the existing private MCP host. Install a
+clean committed checkout at `/opt/mcps/instagram-curator`, install dependencies
+from the frozen lockfile, and create the `curator-mcp` system user with a private
+home at `/var/lib/curator-mcp`. Put credentials in root-only
+`/etc/mcps/curator.env`, with `CURATOR_DATA_DIR=/var/lib/curator-mcp` and a
+`DATABASE_URL` reachable directly from that host. The unit expects Node.js,
+`tunnel-client`, and the project's `tsx` dependency.
+
+Stop the Mac tunnel before starting the service for the same tunnel ID. Enable
+the unit for boot startup and verify tool discovery and database reads before
+relying on it. No worker or media copy is required for the MCP's text tools.
+Preserve the environment and shared database when updating the checkout.
