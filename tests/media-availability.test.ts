@@ -10,7 +10,7 @@ test("library and detail expose only existing media files inside the data direct
     await withPostgresDatabase(async (databaseUrl) => {
       const script = `
         import assert from 'node:assert/strict';
-        import {mkdirSync,writeFileSync,unlinkSync} from 'node:fs';
+        import {mkdirSync,writeFileSync,unlinkSync,chmodSync} from 'node:fs';
         import {join} from 'node:path';
         import {db,pool,migrateAppDatabase} from './src/lib/db.ts';
         import {listContent,getContent} from './src/lib/content.ts';
@@ -29,6 +29,16 @@ test("library and detail expose only existing media files inside the data direct
         assert.equal((await getContent('available')).hasVideo,false); assert.equal((await getContent('available')).hasImage,true);
         await db.execute("UPDATE publications SET video_path=$1 WHERE id='available'",[process.argv[1]]);
         assert.equal((await getContent('available')).hasVideo,false);
+        mkdirSync(join(dataDir,'media/private'));
+        writeFileSync(join(dataDir,'media/private/image.jpg'),'fixture');
+        await insert('unreadable','Still accessible text',null,'media/private/image.jpg');
+        chmodSync(join(dataDir,'media/private'),0);
+        try {
+          const unreadable=await getContent('unreadable');
+          assert.equal(unreadable.hasImage,false);
+          assert.equal(unreadable.caption,'Still accessible text');
+          assert.equal((await listContent()).find(x=>x.id==='unreadable').hasImage,false);
+        } finally { chmodSync(join(dataDir,'media/private'),0o700); }
         await pool.end();
       `;
       const result = runPostgresScript(script, databaseUrl, { CURATOR_DATA_DIR: directory });

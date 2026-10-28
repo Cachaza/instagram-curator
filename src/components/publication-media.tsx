@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 type PublicationMediaProps = {
   imageUrl: string;
@@ -17,9 +17,9 @@ type PublicationMediaProps = {
   fallback: ReactNode;
 };
 
-function withFreshCacheKey(url: string): string {
+function withFreshCacheKey(url: string, attempt: string): string {
   const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}retry=${encodeURIComponent(crypto.randomUUID())}`;
+  return `${url}${separator}retry=${encodeURIComponent(attempt)}`;
 }
 
 export function PublicationMedia({
@@ -40,6 +40,7 @@ export function PublicationMedia({
   const [imageSrc, setImageSrc] = useState(imageUrl);
   const [videoSrc, setVideoSrc] = useState(videoUrl);
   const [posterSrc, setPosterSrc] = useState(imageUrl);
+  const attempts = useRef(0);
 
   function mediaFailed() {
     setFailed(true);
@@ -47,9 +48,12 @@ export function PublicationMedia({
   }
 
   function retry() {
-    setImageSrc(withFreshCacheKey(imageUrl));
-    setVideoSrc(withFreshCacheKey(videoUrl));
-    setPosterSrc(withFreshCacheKey(imageUrl));
+    // An attempt counter also works on self-hosted HTTP origins, where the
+    // secure-context-only crypto.randomUUID API is unavailable.
+    const attempt = `${Date.now()}-${++attempts.current}`;
+    setImageSrc(withFreshCacheKey(imageUrl, attempt));
+    setVideoSrc(withFreshCacheKey(videoUrl, attempt));
+    setPosterSrc(withFreshCacheKey(imageUrl, attempt));
     setFailed(false);
   }
 

@@ -13,7 +13,7 @@ export function resolveMediaPath(storedPath: string | null): string | null {
     const file = statSync(path);
     return file.isFile() && file.size > 0 ? path : null;
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")) return null;
+    if (error && typeof error === "object" && "code" in error && ["ENOENT", "ENOTDIR", "EACCES", "EPERM"].includes(String(error.code))) return null;
     throw error;
   }
 }
