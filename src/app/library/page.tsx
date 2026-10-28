@@ -16,7 +16,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   const t = (await dictionary(locale)).library;
   const all = await listContent({
     query: query.q,
-    sort: query.sort === "newest" || query.sort === "oldest" ? query.sort : undefined,
+    sort: query.sort === "newest" || query.sort === "oldest" || query.sort === "recently_added" ? query.sort : undefined,
     review: query.review && query.review !== "all" ? query.review : undefined,
     action: query.action && query.action !== "all" ? query.action : undefined,
   });
@@ -48,8 +48,8 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
         {query.category && <input type="hidden" name="category" value={query.category} />}
         <label className="library-query">{t.search}<span><Search aria-hidden="true" /><input type="search" name="q" defaultValue={query.q ?? ""} placeholder={t.searchPlaceholder} /></span></label>
         <fieldset className="library-filters"><legend><SlidersHorizontal aria-hidden="true" />{t.filters}</legend>
-          <label>{t.sort}<select name="sort" defaultValue={query.sort ?? ""}>
-            <option value="">{t.relevance}</option><option value="newest">{t.newest}</option><option value="oldest">{t.oldest}</option>
+          <label>{t.sort}<select name="sort" defaultValue={query.sort ?? (query.q?.trim() ? "" : "newest")}>
+            {query.q?.trim() && <option value="">{t.relevance}</option>}<option value="newest">{t.newest}</option><option value="oldest">{t.oldest}</option><option value="recently_added">{t.recentlyAdded}</option>
           </select></label>
           <label>{t.reviewStatus}<select name="review" defaultValue={query.review ?? "all"}>
             <option value="all">{t.allStatuses}</option><option value="unreviewed">{t.unreviewed}</option><option value="approved">{t.approved}</option><option value="corrected">{t.corrected}</option><option value="discarded">{t.discarded}</option>
@@ -65,6 +65,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
         </div>
       </form>
       {query.category === "restaurant" && <p><Link className="secondary" href={libraryHref(query).replace("/library", "/map")}>{restaurantMessages[locale].map}</Link></p>}
+      {query.sort !== "recently_added" && (!query.q?.trim() || query.sort === "newest" || query.sort === "oldest") && all.some((item) => item.savedOrder === null) && <p>{t.unknownSaveOrder}</p>}
       <div className="results-row" role="status"><strong>{filtered.length}</strong> {t.results}</div>
       <div className="masonry-grid">{visible.map((item) => <PublicationCard item={item} locale={locale} query={{ ...query, page: String(currentPage) }} key={item.id} />)}</div>
       {filtered.length === 0 && <div className="empty-state"><h2>{t.empty}</h2><p>{t.emptyHelp}</p><Link className="secondary" href={libraryHref({}, { category: query.category, sort: query.sort })}>{t.clear}</Link></div>}

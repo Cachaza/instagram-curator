@@ -21,11 +21,11 @@ export function createCuratorMcpServer(env: Record<string, string | undefined> =
   });
 
   server.registerTool("curator_search_library", {
-    description: "Search saved publications across titles, summaries, captions, transcripts, tags and review notes. Omit query to browse. Returns compact titles and summaries; use curator_get_publication for full text. Pagination uses nextOffset; keep the same filters and sort. newest/oldest follow export saved order, then import time for manual imports, not video publication date.",
+    description: "Search saved publications across titles, summaries, captions, transcripts, tags and review notes. Omit query to browse. Returns compact titles and summaries; use curator_get_publication for full text. Pagination uses nextOffset; keep the same filters and sort. newest/oldest follow the imported Instagram saved-list sequence, not video publication date. Items without a known save position appear last; recently_added sorts by library import time.",
     inputSchema: {
       query: z.string().optional(), category: z.string().optional(),
       reviewStatus: reviewStatus.optional(), actionStatus: actionStatus.optional(),
-      sort: z.enum(["newest", "oldest"]).optional(),
+      sort: z.enum(["newest", "oldest", "recently_added"]).optional(),
       limit: pageLimit, offset: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER - pageSize).default(0),
     }, annotations: readOnly,
   }, async ({ query, category, reviewStatus, actionStatus, sort, limit, offset }) => {

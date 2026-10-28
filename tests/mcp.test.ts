@@ -78,10 +78,12 @@ test("MCP discovery, browsing, full reads and atomic organization use synthetic 
       assert.equal((await stdio.listTools()).tools.length,3);
       assert.equal((await search(stdio,{query:'automation'})).total,2);
       await stdio.close();
+      await db.execute("UPDATE publications SET created_at='2026-09-30'");
       await db.execute("INSERT INTO publications(id,source_url,caption,processing_status,created_at,published_at) VALUES ('manual-new','https://www.instagram.com/reel/manualnew/','manual','analyzed','2026-10-02','2020-01-01'),('manual-old','https://www.instagram.com/reel/manualold/','manual','analyzed','2026-10-01','2025-01-01')");
       const ordered=await connect({});
-      assert.deepEqual((await search(ordered.client,{sort:'newest'})).items.map(x=>x.id),['manual-new','manual-old','newer','older']);
+      assert.deepEqual((await search(ordered.client,{sort:'newest'})).items.map(x=>x.id),['newer','older','manual-new','manual-old']);
       assert.deepEqual((await search(ordered.client,{sort:'oldest'})).items.map(x=>x.id),['older','newer','manual-old','manual-new']);
+      assert.deepEqual((await search(ordered.client,{sort:'recently_added'})).items.map(x=>x.id).slice(0,2),['manual-new','manual-old']);
       await ordered.client.close();await pool.end();await authPool.end();
     `;
     const result = runPostgresScript(script, databaseUrl);

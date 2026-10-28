@@ -8,7 +8,7 @@ need to run for MCP reads; the database must be reachable and migrated.
 ## Tools
 
 - `curator_search_library`: full-text search or browse, category/review/action
-  filters, relevance or newest/oldest order, compact title/summary results and
+  filters, relevance, newest/oldest saves or recently-added order, compact results and
   `nextOffset` pagination. Keep the same query, filters and order across pages.
 - `curator_list_categories`: effective categories and counts.
 - `curator_get_publication`: summary, caption, transcript, extracted information,
@@ -24,10 +24,28 @@ Search pages use the library's existing capacity of 60 items. Requests outside
 and transcripts are fetched per item, rather than included in search results.
 Search uses the existing PostgreSQL full-text index; this is not semantic search.
 
-Newest/oldest use Instagram export saved order. Manual imports use import time
-and appear ahead of export items in newest order. This is not an exact saved-date
-filter or video publication-date order: exact Instagram save timestamps are not
-stored. The default order retains search relevance.
+Newest/oldest use the saved-list sequence captured during Instagram imports,
+not the publication date or the time an older save was imported into Curator.
+Items without a known position appear last in either direction. Use **Recently
+added** (`sort: "recently_added"`) to sort by library import time instead. Exact
+Instagram save timestamps are not stored. Relevance is available while searching;
+without a query the default is newest saves.
+
+To repair ordering after a saved-list import, use a private JSONL snapshot with
+one `shortcode` per line, already ordered newest-save first:
+
+```sh
+bun run scripts/repair-saved-order.ts --snapshot /private/saved-list.jsonl
+bun run scripts/repair-saved-order.ts --snapshot /private/saved-list.jsonl --apply
+```
+
+The first command previews counts without changing data. Apply replaces only
+`saved_order`, writing a private before/after backup under `data/backups` before
+the first update and committing all changes together. Entries absent from the
+snapshot become unknown; a partial response establishes only the positions it
+contains. Duplicate/invalid records, an empty file, and a snapshot matching no
+library items are refused. Use the imported response sequence, never sort the
+snapshot by publication timestamps or bulk-import time.
 
 The agent can infer interests from saved material and discuss priorities with
 you. AI-generated relevance/actions are suggestions, not evidence of your stated

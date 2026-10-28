@@ -14,6 +14,7 @@ export type ContentItem = {
   reviewStatus: string;
   actionStatus: string;
   publishedAt: string;
+  savedOrder: number | null;
   hasImage: boolean;
   hasVideo: boolean;
   category: string;
@@ -69,6 +70,7 @@ function mapRow(row: Row): ContentItem {
     reviewStatus: String(row.review_review_status ?? row.review_status),
     actionStatus: String(row.review_action_status ?? row.action_status),
     publishedAt: String(row.published_at ?? row.created_at),
+    savedOrder: typeof row.saved_order === "number" ? row.saved_order : null,
     hasImage: Boolean(resolveMediaPath(typeof row.contact_sheet_path === "string" ? row.contact_sheet_path : null)),
     hasVideo: Boolean(resolveMediaPath(typeof row.video_path === "string" ? row.video_path : null)),
     category,
@@ -105,7 +107,7 @@ const VISIBLE_CONTENT = `(a.publication_id IS NOT NULL OR p.processing_status='a
     (NULLIF(trim(p.caption),'') IS NOT NULL OR NULLIF(trim(p.transcript_text),'') IS NOT NULL)))`;
 
 export async function listContent(options: {
-  category?: string; query?: string; review?: string; action?: string; sort?: "newest" | "oldest"; limit?: number;
+  category?: string; query?: string; review?: string; action?: string; sort?: "newest" | "oldest" | "recently_added"; limit?: number;
 } = {}): Promise<ContentItem[]> {
   const clauses = [VISIBLE_CONTENT];
   const params: Array<string | number> = [];
@@ -124,11 +126,13 @@ export async function listContent(options: {
   const searchOrder = search && !options.sort
     ? `ts_rank(content_search.document,to_tsquery('curator_search',$${searchPosition})) DESC,`
     : "";
-  const dateOrder = options.sort === "oldest"
+  const dateOrder = options.sort === "recently_added"
+    ? "p.created_at DESC,p.id ASC"
+    : options.sort === "oldest"
     ? `CASE WHEN p.saved_order IS NULL THEN 1 ELSE 0 END,
       CASE WHEN p.saved_order IS NULL THEN p.created_at END ASC,
       p.saved_order DESC,p.id DESC`
-    : `CASE WHEN p.saved_order IS NULL THEN 0 ELSE 1 END,
+    : `CASE WHEN p.saved_order IS NULL THEN 1 ELSE 0 END,
       CASE WHEN p.saved_order IS NULL THEN p.created_at END DESC,
       p.saved_order ASC,p.id ASC`;
   return ((await db.all(`${SELECT} ${searchJoin} WHERE ${clauses.join(" AND ")}
