@@ -9,10 +9,14 @@ export const messages = {
     media: {
       unavailable: "Los archivos multimedia no están disponibles en esta instalación.",
       openSource: "Ver publicación en Instagram",
+      loadFailed: "No se pudo cargar el contenido multimedia.",
+      retry: "Recargar contenido",
+      cardUnavailable: "Imagen no disponible",
     },
     diagnostics: {
       title: "DIAGNÓSTICO", ready: "Todo preparado", pending: "Quedan ajustes",
       intro: "Estado de las dependencias de esta instalación.",
+      mediaFiles: "Archivos multimedia", mediaFilesSummary: "{available} archivos disponibles; {unavailable} no disponibles en esta instalación.",
       storage: "Almacenamiento", noWrite: "Sin permisos de escritura",
       instagram: "Sesión de Instagram", instagramHelp: "Configúrala y valida un reel desde Instagram",
       local: "Transcripción local", openai: "Transcripción OpenAI",
@@ -184,10 +188,14 @@ export const messages = {
     media: {
       unavailable: "The media files are not available in this installation.",
       openSource: "View publication on Instagram",
+      loadFailed: "The media could not be loaded.",
+      retry: "Reload media",
+      cardUnavailable: "Image unavailable",
     },
     diagnostics: {
       title: "DIAGNOSTICS", ready: "Ready", pending: "Setup required",
       intro: "Dependency status for this installation.",
+      mediaFiles: "Media files", mediaFilesSummary: "{available} files available; {unavailable} unavailable on this installation.",
       storage: "Storage", noWrite: "Write permission missing",
       instagram: "Instagram session", instagramHelp: "Configure the session and validate an Instagram reel",
       local: "Local transcription", openai: "OpenAI transcription",

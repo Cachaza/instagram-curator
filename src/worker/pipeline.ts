@@ -5,6 +5,7 @@ import { dataDir } from "../lib/paths";
 import { getWorkerConfig } from "./config";
 import { runCommand, runCommandCapture } from "./process";
 import { transcribe } from "./transcribe";
+import { publishMediaFile } from "../lib/atomic-media";
 
 type Publication = {
   id: string;
@@ -131,11 +132,11 @@ export async function processNextPublication(): Promise<boolean> {
         normalizedFrames.push(normalized);
       }
       const contactSheetPath = join(directory, "contact-sheet.jpg");
-      await runCommand([
+      await publishMediaFile(contactSheetPath, (temporary) => runCommand([
         workerConfig.ffmpegBin, "-y", "-pattern_type", "glob", "-i", join(framesDirectory, "*.jpg"),
         "-vf", normalizedFrames.length === 1 ? "scale=1080:-2" : "scale=720:-2,tile=3x3:padding=8:margin=8",
-        "-frames:v", "1", contactSheetPath,
-      ]);
+        "-frames:v", "1", temporary,
+      ]));
       await transition(publication.id, "ready_for_analysis", {
         contact_sheet_path: portable(contactSheetPath),
         frames_json: JSON.stringify(normalizedFrames.map(portable)),
@@ -193,11 +194,11 @@ export async function processNextPublication(): Promise<boolean> {
       .slice(0, workerConfig.maxContactSheetFrames);
     const contactSheetPath = join(directory, "contact-sheet.jpg");
     if (frames.length > 0) {
-      await runCommand([
+      await publishMediaFile(contactSheetPath, (temporary) => runCommand([
         workerConfig.ffmpegBin, "-y", "-pattern_type", "glob",
         "-i", join(framesDirectory, "*.jpg"),
-        "-vf", "tile=3x3:padding=8:margin=8", "-frames:v", "1", contactSheetPath,
-      ]);
+        "-vf", "tile=3x3:padding=8:margin=8", "-frames:v", "1", temporary,
+      ]));
     }
 
     await transition(publication.id, "transcribing", {

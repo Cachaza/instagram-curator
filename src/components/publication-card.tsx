@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import { CardMediaImage } from "@/components/card-media-image";
 import {
   Bookmark,
   Clapperboard,
@@ -16,7 +16,7 @@ import {
   Utensils,
   type LucideIcon,
 } from "lucide-react";
-import type { Locale } from "@/lib/messages";
+import { messages, type Locale } from "@/lib/messages";
 import { publicationHref, type LibraryQuery } from "@/lib/library-filters";
 import type { ContentItem } from "@/lib/content";
 
@@ -53,7 +53,7 @@ export function PublicationCard({ item, selected = false, locale = "es", query }
     <Link className={`publication-card ${selected ? "publication-card-selected" : ""}`} href={publicationHref(item.id, query)}>
       <div className="card-image">
         {item.hasImage
-          ? <Image src={`/api/media/${encodeURIComponent(item.id)}`} width={700} height={440} unoptimized alt="" />
+          ? <CardMediaImage src={`/api/media/${encodeURIComponent(item.id)}`} unavailable={messages[locale].media.cardUnavailable} />
           : <span className="card-placeholder"><CategoryIcon aria-hidden="true" /></span>}
         <span className={`category-badge ${meta.className}`}><CategoryIcon aria-hidden="true" /> {meta.label}</span>
       </div>

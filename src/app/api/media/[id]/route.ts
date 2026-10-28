@@ -3,20 +3,20 @@ import { db } from "@/lib/db";
 import { resolveCompatibleVideo, resolveMediaPath } from "@/lib/media";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { readFile } from "node:fs/promises";
+import { mediaNotFound, previewResponse } from "@/lib/media-response";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401, headers: { "cache-control": "private, no-store" } });
   const { id } = await context.params;
   const row = await db.one<{ contact_sheet_path: string | null; video_path: string | null; audio_path: string | null }>("SELECT contact_sheet_path,video_path,audio_path FROM publications WHERE id=$1", [id]);
   const kind = new URL(request.url).searchParams.get("kind");
   const stored = kind === "video" ? row?.video_path : kind === "audio" ? row?.audio_path : row?.contact_sheet_path;
   const resolvedPath = resolveMediaPath(stored ?? null);
-  if (!resolvedPath) return new NextResponse("Not found", { status: 404 });
+  if (!resolvedPath) return mediaNotFound();
   const path = kind === "video" ? await resolveCompatibleVideo(resolvedPath) : resolvedPath;
   const contentType = kind === "video" ? "video/mp4" : kind === "audio" ? "audio/wav" : "image/jpeg";
   if (kind === "video" || kind === "audio") {
@@ -43,7 +43,5 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     if (status === 206) responseHeaders["content-range"] = `bytes ${start}-${end}/${size}`;
     return new NextResponse(body, { status, headers: responseHeaders });
   }
-  return new NextResponse(new Uint8Array(await readFile(path)), {
-    headers: { "content-type": contentType, "cache-control": "private, max-age=3600" },
-  });
+  return previewResponse(path, request.headers.get("if-none-match"));
 }

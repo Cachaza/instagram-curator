@@ -319,8 +319,16 @@ Cloudflare Tunnel terminates HTTPS and forwards to Traefik on port 80, keep the
 application origin configured as the public HTTPS domain.
 
 Library cards and publication pages check that stored media paths resolve to
-existing files. Missing files show a placeholder and the original Instagram
-link; they do not prevent access to captions, transcripts, or analyses.
+nonempty files. Failed previews show a placeholder; publication pages offer
+Reload media and the original Instagram link. Preview requests revalidate their
+cache, and preview generation replaces the previous file only after success.
+Captions, transcripts, and analyses remain accessible when media is missing.
+
+Run `bun run scripts/audit-media.ts` on each media host to check recorded files.
+It writes a private report under `data/diagnostics/` without changing library
+records. Admin diagnostics also show the unavailable file count. Shared
+PostgreSQL does not synchronize the hosts' media directories: reloads cannot
+recover absent files, which need restoration or downloading again.
 
 ### Shared Mac/server database and SQLite migration
 

@@ -6,6 +6,7 @@ import { db } from "./db";
 import { getSetting } from "./settings";
 import { codexAccountStatus } from "./codex/account";
 import { dictionary } from "./i18n";
+import { auditMediaFiles } from "./media-audit";
 
 export type Diagnostic = { id: string; label: string; ok: boolean; detail: string; external?: boolean };
 
@@ -33,9 +34,12 @@ export async function systemDiagnostics(): Promise<Diagnostic[]> {
   }
   let database = false;
   try { database = Boolean(await db.one("SELECT 1 AS connected")); } catch { /* Never expose a connection URL or password in diagnostics. */ }
+  const mediaAudit = database ? await auditMediaFiles() : null;
   return [
     { id: "postgresql", label: "PostgreSQL", ok: database, detail: database ? "Connected" : "Check DATABASE_URL and private network access" },
     { id: "storage", label: t.diagnostics.storage, ok: storage, detail: storage ? join(dataDir, "media") : t.diagnostics.noWrite },
+    ...(mediaAudit ? [{ id: "media_files", label: t.diagnostics.mediaFiles, ok: mediaAudit.unavailable.length === 0,
+      detail: t.diagnostics.mediaFilesSummary.replace("{available}", String(mediaAudit.available)).replace("{unavailable}", String(mediaAudit.unavailable.length)) }] : []),
     binary("ffmpeg", "FFmpeg", await getSetting("media.ffmpeg_bin", "ffmpeg"), ["-version"]),
     binary("ffprobe", "FFprobe", await getSetting("media.ffprobe_bin", "ffprobe"), ["-version"]),
     ...webOnly ? [] : [

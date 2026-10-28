@@ -1,9 +1,9 @@
 import { ArrowLeft, ArrowRight, Check, ExternalLink, MapPin, Sparkles, Utensils } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { categoryInfo } from "@/components/publication-card";
 import { PublicationActions } from "@/components/publication-actions";
+import { PublicationMedia } from "@/components/publication-media";
 import { getContent, listContent } from "@/lib/content";
 import { requireSession } from "@/lib/session";
 import { dictionary } from "@/lib/i18n";
@@ -155,8 +155,19 @@ export default async function PublicationPage({ params, searchParams }: { params
       </nav>
       <div className="detail-grid">
         <section className="detail-media">
-          {item.hasVideo ? <video controls preload="metadata" poster={item.hasImage ? `/api/media/${item.id}` : undefined} src={`/api/media/${item.id}?kind=video`} /> : item.hasImage ? <Image src={`/api/media/${item.id}`} width={900} height={1200} unoptimized alt="" /> : <div className="detail-placeholder"><CategoryIcon aria-hidden="true" /></div>}
-          {!item.hasVideo && !item.hasImage && <p className="media-unavailable">{t.media.unavailable} <a href={item.sourceUrl} target="_blank" rel="noreferrer">{t.media.openSource}</a></p>}
+          <PublicationMedia key={item.id}
+            imageUrl={`/api/media/${encodeURIComponent(item.id)}`}
+            videoUrl={`/api/media/${encodeURIComponent(item.id)}?kind=video`}
+            hasImage={item.hasImage}
+            hasVideo={item.hasVideo}
+            preferVideo={item.hasVideo || item.mediaType === "video"}
+            sourceUrl={item.sourceUrl}
+            unavailable={t.media.unavailable}
+            loadFailed={t.media.loadFailed}
+            retryLabel={t.media.retry}
+            openSource={t.media.openSource}
+            fallback={<div className="detail-placeholder"><CategoryIcon aria-hidden="true" /></div>}
+          />
           {item.caption && <details><summary>Descripción original</summary><p>{item.caption}</p></details>}
           {item.transcript && <details><summary>Transcripción</summary><p className="transcript">{item.transcript}</p></details>}
         </section>

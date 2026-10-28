@@ -1,5 +1,5 @@
 import { dirname, join, resolve, sep } from "node:path";
-import { existsSync, renameSync } from "node:fs";
+import { existsSync, renameSync, statSync } from "node:fs";
 import { dataDir } from "./paths";
 import { getSetting } from "./settings";
 import { runCommand, runCommandCapture } from "../worker/process";
@@ -9,7 +9,13 @@ export function resolveMediaPath(storedPath: string | null): string | null {
   const root = resolve(dataDir);
   const path = resolve(root, storedPath);
   if (path !== root && !path.startsWith(`${root}${sep}`)) return null;
-  return existsSync(path) ? path : null;
+  try {
+    const file = statSync(path);
+    return file.isFile() && file.size > 0 ? path : null;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")) return null;
+    throw error;
+  }
 }
 
 const compatibleVideos = new Map<string, Promise<string>>();
