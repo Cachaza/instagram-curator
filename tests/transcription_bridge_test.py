@@ -14,6 +14,7 @@ import urllib.request
 import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
 spec = importlib.util.spec_from_file_location("transcription_bridge", ROOT / "scripts/transcription-bridge.py")
 bridge = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = bridge
@@ -135,6 +136,19 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual((output / "truncated.txt").read_bytes(), bytes([226, 130]))
         self.assertEqual(list(self.spool.iterdir()), [])
 
+    def test_model_exit_cancels_helper_before_collecting_output(self):
+        helper = "import pathlib,os,signal; pathlib.Path('helper-pid.txt').write_text(str(os.getpid())); pathlib.Path('partial.txt').write_text('kept'); os.write(1,b'ready\\n'); signal.pause()"
+        model = "import subprocess,sys; p=subprocess.Popen([sys.executable,'-c'," + repr(helper) + "],cwd=sys.argv[2],stdout=subprocess.PIPE); assert p.stdout.readline()==b'ready\\n'; sys.exit(7)"
+        self.server.command = [sys.executable, "-c", model]
+        output = self.root / "helper-output"
+        result = self.run_client(output)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((output / "partial.txt").read_text(), "kept")
+        helper_pid = int((output / "helper-pid.txt").read_text())
+        state = subprocess.run(["ps", "-p", str(helper_pid), "-o", "stat="], capture_output=True, text=True).stdout.strip()
+        self.assertTrue(not state or state.startswith("Z"), state)
+        self.assertEqual(list(self.spool.iterdir()), [])
+
     def test_cli_capacity_rejection_has_no_output_or_temp_side_effects(self):
         self.server.job_lock.acquire()
         try:
@@ -221,14 +235,13 @@ class BridgeTests(unittest.TestCase):
             spool = self.root / "signal-spool"
             command = [sys.executable, "-c", "import pathlib,socket,sys,os,signal; signal.signal(signal.SIGTERM,signal.SIG_IGN); out=pathlib.Path(sys.argv[2]); (out/'partial.txt').write_text('kept'); s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.sendto(str(os.getpid()).encode(),('127.0.0.1',int(os.environ['READY_PORT']))); signal.pause()"]
             config = self.root / "service.json"
-            with socket.socket() as port_socket:
-                port_socket.bind(("127.0.0.1", 0))
-                port = port_socket.getsockname()[1]
-            config.write_text(json.dumps({"bind_host": "127.0.0.1", "port": port, "token": "test-token", "command": command, "spool_dir": str(spool), "tls_cert_file": str(self.cert), "tls_key_file": str(self.key)}))
+            config.write_text(json.dumps({"bind_host": "127.0.0.1", "port": 0, "token": "test-token", "command": command, "spool_dir": str(spool), "tls_cert_file": str(self.cert), "tls_key_file": str(self.key)}))
             env = os.environ.copy()
             env["READY_PORT"] = str(ready_port)
-            wrapper = "import importlib.util,socket; p=%r; s=importlib.util.spec_from_file_location('service',p); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); original=m.ThreadedTLSServer.serve_forever; m.ThreadedTLSServer.serve_forever=lambda self,*a,**k:(socket.socket(socket.AF_INET,socket.SOCK_DGRAM).sendto(b'ready',('127.0.0.1',int(__import__('os').environ['READY_PORT']))),original(self,*a,**k)); m.main()" % str(ROOT / "scripts/transcription-bridge.py")
-            service = subprocess.Popen([sys.executable, "-c", wrapper, "--config", str(config)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            service = subprocess.Popen([sys.executable, str(ROOT / "scripts/transcription-bridge.py"), "--config", str(config)], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            readiness = service.stdout.readline()
+            self.assertTrue(readiness, "service exited before readiness")
+            port = json.loads(readiness)["port"]
             request_error = []
             def submit():
                 try:
@@ -238,7 +251,6 @@ class BridgeTests(unittest.TestCase):
                     request_error.append(exc)
             worker = threading.Thread(target=submit)
             try:
-                self.assertEqual(ready_socket.recvfrom(bridge.TRANSFER_BUFFER_SIZE)[0], b"ready")
                 worker.start()
                 child_pid = int(ready_socket.recvfrom(bridge.TRANSFER_BUFFER_SIZE)[0])
                 service.send_signal(__import__("signal").SIGTERM)
@@ -260,6 +272,8 @@ class BridgeTests(unittest.TestCase):
                     service.wait()
                 if worker.is_alive():
                     worker.join()
+                service.stdout.close()
+                service.stderr.close()
 
     def test_forced_service_exit_stops_model_before_restart_collects_artifacts(self):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as ready_socket:

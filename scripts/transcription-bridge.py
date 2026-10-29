@@ -7,7 +7,6 @@ import http.server
 import io
 import json
 import os
-import select
 import shutil
 import signal
 import socket
@@ -18,6 +17,7 @@ import tempfile
 import threading
 import uuid
 from pathlib import Path
+from transcription_processes import cancel_members, group_members
 
 TRANSFER_BUFFER_SIZE = io.DEFAULT_BUFFER_SIZE
 
@@ -65,52 +65,12 @@ def stop_owned_group(directory):
     if not owner.is_file():
         return
     group = int(json.loads(owner.read_text())["group"])
-    rows = subprocess.check_output(["ps", "-axo", "pid=,pgid=,stat=,args="], text=True).splitlines()
-    members = []
-    for row in rows:
-        parts = row.split(None, 3)
-        if len(parts) == 4 and int(parts[1]) == group and not parts[2].startswith("Z"):
-            members.append((int(parts[0]), parts[3]))
+    members = group_members(group)
     if not members:
         return
     if not any(str(directory) in command for _, command in members):
         raise RuntimeError("Previous transcription process identity changed; refusing to remove its output or stop unrelated processes")
-    # Register OS exit notifications before cancellation. No polling interval or
-    # arbitrary shutdown grace period is needed on macOS or Linux.
-    descriptors = []
-    queue = select.kqueue() if hasattr(select, "kqueue") else None
-    watched = set()
-    try:
-        for pid, _ in members:
-            try:
-                if queue:
-                    queue.control([select.kevent(pid, filter=select.KQ_FILTER_PROC,
-                                                 flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT,
-                                                 fflags=select.KQ_NOTE_EXIT)], 0)
-                    watched.add(pid)
-                else:
-                    descriptors.append(os.pidfd_open(pid))
-            except ProcessLookupError:
-                pass
-        try:
-            os.killpg(group, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        if queue:
-            while watched:
-                for event in queue.control(None, len(watched)):
-                    watched.discard(event.ident)
-        else:
-            while descriptors:
-                ready, _, _ = select.select(descriptors, [], [])
-                for descriptor in ready:
-                    os.close(descriptor)
-                    descriptors.remove(descriptor)
-    finally:
-        if queue:
-            queue.close()
-        for descriptor in descriptors:
-            os.close(descriptor)
+    cancel_members(group)
 
 
 def initialize_server(server, command, token, spool):
@@ -130,8 +90,10 @@ def initialize_server(server, command, token, spool):
         if not directory.is_dir() or directory.is_symlink():
             raise ValueError("unexpected entry in bridge spool")
         uuid.UUID(directory.name)
-        stop_owned_group(directory)
-        (directory / "audio.wav").unlink(missing_ok=True)
+        try:
+            stop_owned_group(directory)
+        finally:
+            (directory / "audio.wav").unlink(missing_ok=True)
     for directory in directories:
         if not (directory / "result.json").is_file():
             output = directory / "output"
@@ -259,6 +221,7 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             return self._json(503, {"ok": False, "error": "transcription capacity: allowed 1 active job, requested 2; retry after the active job completes"})
         process = None
         owner_fd = None
+        stopped = True
         try:
             if directory.exists():
                 return self._json(409, {"ok": False, "error": "job already exists; recover its result using GET /jobs/ID"})
@@ -299,12 +262,19 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                     self.server.processes.add(process)
                 save_json(directory, "owner.json", {"group": process.pid})
                 os.write(owner_fd, b"start")
+                stopped = False
                 status = process.wait()
                 stop_owned_group(directory)
+                stopped = True
                 response = {"ok": status == 0, "files": regular_artifacts(output), "job_id": directory.name}
                 if status:
                     response["error"] = f"transcription command exited with status {status}"
             except Exception:
+                # Do not inspect or remove output while an unverified writer
+                # might still be running. Keep it for safe startup recovery.
+                if not stopped:
+                    stop_owned_group(directory)
+                    stopped = True
                 response = {"ok": False, "files": regular_artifacts(output), "job_id": directory.name,
                             "error": "transcription command or upload could not be completed"}
             finally:

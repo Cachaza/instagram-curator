@@ -32,6 +32,9 @@ network; do not publish this endpoint to the internet. The model command receive
 the temporary audio path and output directory and must write
 `transcript.raw.json` with a nonempty `text` field, as the existing local
 transcription command does. Preserve the command's required executable PATH.
+Run the model in the foreground; helpers must remain in its inherited process
+group. The bridge supervises that group and cancels remaining helpers before
+collecting output. Model commands must not daemonize into separate sessions.
 
 Run `python3 scripts/transcription-bridge.py --config /private/path/bridge.json`
 under the machine's service manager. Authenticated `GET /health` checks the

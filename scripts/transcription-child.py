@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from transcription_processes import cancel_members
 
 
 def main():
@@ -24,6 +25,7 @@ def main():
     threading.Thread(target=owner_lost, daemon=True).start()
     process = subprocess.Popen(sys.argv[3:], close_fds=True)
     status = process.wait()
+    cancel_members(os.getpgrp(), exclude=os.getpid())
     return status if status >= 0 else 128 - status
 
 
