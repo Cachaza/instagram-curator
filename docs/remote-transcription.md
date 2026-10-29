@@ -85,6 +85,46 @@ the same client configuration to retrieve/acknowledge the pending result.
 The bridge reclaims abandoned audio on startup while preserving recoverable
 result text.
 
+## Managed HTTPS certificates
+
+For a bridge inside an existing Tailscale network, Tailscale Serve can manage
+HTTPS certificates. Enable Serve/HTTPS as the tailnet owner first. Bind the
+Python bridge to `127.0.0.1`, then run:
+
+```sh
+tailscale serve --bg https+insecure://127.0.0.1:BRIDGE_PORT
+```
+
+The `https+insecure` setting applies only to that same-machine loopback hop.
+Remote clients still verify the Tailscale HTTPS certificate and hostname using
+their normal system trust store. Keep the bridge's bearer token configured.
+Serve is private to the tailnet; do not enable Funnel for the bridge.
+
+Use the device's full `https://DEVICE.TAILNET.ts.net` URL in the server client
+configuration and omit `ca_file`. When an existing private TCP relay is required,
+set `connect_host` and `connect_port` to its address and port. The URL continues
+to determine SNI and the verified certificate identity; these optional settings
+change only the TCP destination. Forward the relay to the device's Serve HTTPS
+port. This preserves TLS verification through the relay and removes manual
+certificate renewal for the remote connection.
+
+## Recovering previews
+
+Run `bun run repair:media` on the media-owning server to inspect missing or
+undecodable previews. The default mode makes no changes or downloads. To repair,
+stop the processing worker and run `bun run repair:media --apply`; optionally
+add `--id PUBLICATION_ID`. Restart the worker afterwards. Apply mode acquires
+the same exclusive worker lock and honors `CURATOR_WORKER_DISABLED`.
+
+Recovery validates saved frames and videos before reuse, otherwise downloads
+fresh media using the configured Instagram credentials. Attempts stay under the
+publication's server media directory. A completed preview is published
+atomically; original inputs and failed-attempt artifacts are retained. Recovery
+updates media references and records `media_repair` events without rerunning
+transcription, analysis, or changing review and organization choices. Failed
+sources produce persisted errors and a nonzero CLI exit; retry after resolving
+the reported Instagram access or media failure.
+
 ## Moving an existing library
 
 Stop the old worker first. Inventory both media directories and compare file

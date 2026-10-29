@@ -55,11 +55,11 @@ class BridgeTests(unittest.TestCase):
         self.temp.cleanup()
         tempfile.tempdir = self.original_tempdir
 
-    def run_client(self, output, trusted=True, recover=False):
+    def run_client(self, output, trusted=True, recover=False, config_overrides=None):
         audio = self.root / "input.wav"
         audio.write_bytes(b"synthetic audio")
         config = self.root / "client.json"
-        config.write_text(json.dumps({"url": self.url, "token": "test-token", **({"ca_file": str(self.cert)} if trusted else {})}))
+        config.write_text(json.dumps({"url": self.url, "token": "test-token", **({"ca_file": str(self.cert)} if trusted else {}), **(config_overrides or {})}))
         env = os.environ.copy()
         env["CURATOR_TRANSCRIPTION_BRIDGE_CONFIG_FILE"] = str(config)
         args = [sys.executable, str(ROOT / "scripts/transcribe-remote.py")]
@@ -113,6 +113,30 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(json.loads((output / "transcript.raw.json").read_text()), {"text": "synthetic"})
         self.assertFalse((output / client.PENDING).exists())
         self.assertEqual(list(self.spool.iterdir()), [])
+
+    def test_cli_relay_preserves_verified_url_identity(self):
+        output = self.root / "relay-output"
+        run = self.run_client(output, config_overrides={"url": "https://localhost", "connect_host": "127.0.0.1", "connect_port": self.server.server_address[1]})
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(json.loads((output / "transcript.raw.json").read_text()), {"text": "synthetic"})
+        self.assertEqual(list(self.spool.iterdir()), [])
+
+    def test_cli_relay_rejects_wrong_hostname_and_untrusted_certificate_before_upload(self):
+        settings = {"url": "https://wrong-host.invalid", "connect_host": "127.0.0.1", "connect_port": self.server.server_address[1]}
+        run = self.run_client(self.root / "wrong-name-output", config_overrides=settings)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertEqual(list(self.spool.iterdir()), [])
+        settings["url"] = "https://localhost"
+        run = self.run_client(self.root / "untrusted-relay-output", trusted=False, config_overrides=settings)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertEqual(list(self.spool.iterdir()), [])
+
+    def test_cli_relay_rejects_invalid_transport_before_output_creation(self):
+        output = self.root / "invalid-relay-output"
+        run = self.run_client(output, config_overrides={"connect_host": "127.0.0.1", "connect_port": True})
+        self.assertNotEqual(run.returncode, 0)
+        self.assertEqual(list(self.spool.iterdir()), [])
+        self.assertFalse(output.exists())
 
     def test_cli_failure_preserves_raw_artifacts_and_exits_nonzero(self):
         self.server.command = [sys.executable, "-c", "import pathlib,sys; pathlib.Path(sys.argv[2], 'transcript.raw.json').write_text('{\\\"text\\\":\\\"partial\\\"}'); sys.exit(7)"]

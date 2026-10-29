@@ -20,6 +20,7 @@
     "restore": "tsx scripts/restore.ts",
     "service:install": "bash scripts/install-service.sh",
     "worker": "tsx src/worker/cli.ts",
+    "repair:media": "tsx scripts/repair-media.ts",
     "auth:migrate": "tsx scripts/migrate.ts",
     "test": "bun test ./tests",
     "migrate:postgres": "tsx scripts/migrate-postgres.ts",
