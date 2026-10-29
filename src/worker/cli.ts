@@ -3,6 +3,10 @@ import { processNextAnalysis } from "./analyze";
 import { codexAppServer } from "../lib/codex/app-server";
 import { pool, transaction } from "../lib/db";
 
+if (process.env.CURATOR_WORKER_DISABLED === "1") {
+  throw new Error("Processing is disabled on this host (CURATOR_WORKER_DISABLED=1). Run the worker on the server that owns the media storage; this host may run the transcription bridge only.");
+}
+
 async function recoverInterruptedWork(): Promise<void> {
   await transaction(async (tx) => {
     const interrupted = (await tx.all(`

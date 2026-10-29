@@ -356,13 +356,19 @@ CURATOR_DATABASE_REMOTE_HOST and CURATOR_DATABASE_REMOTE_PORT, then keep
 binds only to loopback. Restrict database network access and use SCRAM credentials;
 use verified PostgreSQL TLS when connecting without an encrypted private tunnel.
 
-Media files and Codex login files remain on each machine's private filesystem.
-A shared database does not transfer videos or thumbnails: copy/synchronize those
-files separately, retaining their relative `media/...` paths. Preserve the web
-server's `auth-secret` when migrating so its signed sessions remain valid.
-Apple Silicon transcription models remain on the Mac. Start only one processing
-host: the worker holds a shared database lock before recovering interrupted jobs.
-The server can remain web-only while the Mac uses the local transcription model.
+Media lives on the processing host's filesystem. Run the website and worker
+against the **same server data volume** to keep one permanent copy of the library.
+A shared database alone does not transfer videos or thumbnails. Preserve relative
+`media/...` paths and the web server's `auth-secret` when migrating.
+
+Apple Silicon transcription can remain on a Mac without storing the library
+there. See [remote transcription](docs/remote-transcription.md): the server
+downloads media and creates previews, sends temporary audio to the Mac over
+authenticated HTTPS, and stores the returned transcription artifacts on the
+server. Set `CURATOR_WORKER_DISABLED=1` on the Mac to prevent accidentally starting
+the full processing worker there. Single-host installations need no bridge.
+Start only one processing worker: it holds a shared database lock before
+recovering interrupted jobs.
 
 ## Import API
 
