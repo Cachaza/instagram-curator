@@ -64,28 +64,6 @@ def artifact_bytes(contents):
     raise ValueError("bridge returned an invalid artifact")
 
 
-def bridge_connection(parsed, context, config):
-    """Route private TCP through a relay while verifying the URL's TLS identity."""
-    connection = http.client.HTTPSConnection(parsed.hostname, parsed.port or 443, context=context)
-    host = config.get("connect_host")
-    port = config.get("connect_port", parsed.port or 443)
-    if host is not None:
-        if not isinstance(host, str) or not host or any(character in host for character in "/@?#"):
-            raise ValueError("connect_host must be a network hostname or IP address")
-        # These are the TCP protocol's port bounds, not an application capacity.
-        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
-            raise ValueError("connect_port must be a TCP port from 1 through 65535")
-        create_connection = connection._create_connection
-        def route(_address, *args, **kwargs):
-            return create_connection((host, port), *args, **kwargs)
-        connection._create_connection = route
-    elif "connect_port" in config:
-        raise ValueError("connect_port requires connect_host")
-    # HTTPSConnection still supplies parsed.hostname for SNI and certificate
-    # hostname verification before sending Authorization or any audio bytes.
-    return connection
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--recover", action="store_true", help="recover/acknowledge a pending result in OUTPUT_DIRECTORY")
@@ -106,8 +84,7 @@ def main():
             raise ValueError("HTTPS bridge URL and token must be configured")
         context = ssl.create_default_context(cafile=ca_file)
         def connect():
-            return bridge_connection(parsed, context, cfg)
-        connection = connect()  # Validate transport before creating pending state.
+            return http.client.HTTPSConnection(parsed.hostname, parsed.port or 443, context=context)
         output_dir.mkdir(parents=True, exist_ok=True)
         recover_existing = pending_path.exists()
         if recover_existing:
@@ -120,6 +97,7 @@ def main():
             sync_directory(output_dir.parent)
         job_id = str(uuid.UUID(pending["job_id"]))
         if not pending.get("stored"):
+            connection = connect()
             if args.recover or recover_existing:
                 connection.request("GET", "/jobs/" + job_id, headers={"Authorization": "Bearer " + token})
             else:

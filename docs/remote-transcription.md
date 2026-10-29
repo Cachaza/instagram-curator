@@ -10,6 +10,19 @@ failed attempts, are returned to the server and retained beside its media. A
 temporary text outbox on the Mac keeps undelivered results until the server
 acknowledges that they have been durably stored; it contains no audio or images.
 
+## Server-only API transcription
+
+To run independently of the Mac, configure OpenAI transcription in Curator setup
+and use `transcription.provider: "openai"` on the server worker. Set the desired
+`transcription.model` there; the existing default is `whisper-1`. Keep the API
+credential in Curator's secret settings, never in the committed worker config.
+The server uploads audio to the configured API and retains media and transcripts
+on its own data volume. This uses paid API transcription for every audio job.
+
+After validating a real API transcription, disable any old Mac bridge service
+and remove its private relay. Server-only transcription requires no Mac service,
+Tailscale Serve configuration, or bridge certificate renewal.
+
 ## Mac bridge
 
 Create a private JSON configuration, readable only by the bridge user:
@@ -84,29 +97,6 @@ is interrupted, the error identifies the server output directory. Run
 the same client configuration to retrieve/acknowledge the pending result.
 The bridge reclaims abandoned audio on startup while preserving recoverable
 result text.
-
-## Managed HTTPS certificates
-
-For a bridge inside an existing Tailscale network, Tailscale Serve can manage
-HTTPS certificates. Enable Serve/HTTPS as the tailnet owner first. Bind the
-Python bridge to `127.0.0.1`, then run:
-
-```sh
-tailscale serve --bg https+insecure://127.0.0.1:BRIDGE_PORT
-```
-
-The `https+insecure` setting applies only to that same-machine loopback hop.
-Remote clients still verify the Tailscale HTTPS certificate and hostname using
-their normal system trust store. Keep the bridge's bearer token configured.
-Serve is private to the tailnet; do not enable Funnel for the bridge.
-
-Use the device's full `https://DEVICE.TAILNET.ts.net` URL in the server client
-configuration and omit `ca_file`. When an existing private TCP relay is required,
-set `connect_host` and `connect_port` to its address and port. The URL continues
-to determine SNI and the verified certificate identity; these optional settings
-change only the TCP destination. Forward the relay to the device's Serve HTTPS
-port. This preserves TLS verification through the relay and removes manual
-certificate renewal for the remote connection.
 
 ## Recovering previews
 
