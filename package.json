@@ -36,7 +36,7 @@
     "kysely": "^0.29.7",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",
-    "next": "^16.2.11",
+    "next": "^16.4.5",
     "openai": "^6.48.0",
     "pg": "^8.23.1",
     "react": "^19.2.8",
@@ -53,7 +53,7 @@
     "@types/react-dom": "^19.2.3",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.2",
-    "eslint-config-next": "^16.2.9",
+    "eslint-config-next": "^16.4.5",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   },
