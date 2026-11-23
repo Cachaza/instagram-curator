@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "better-auth": "^1.6.24",
+    "better-auth": "^1.7.27",
     "better-sqlite3": "^12.4.1",
     "kysely": "^0.29.7",
     "leaflet": "^1.9.4",
